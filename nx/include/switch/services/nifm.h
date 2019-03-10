@@ -1,7 +1,7 @@
 /**
  * @file nifm.h
  * @brief Network interface service IPC wrapper.
- * @author shadowninja108, shibboleet
+ * @author shadowninja108, shibboleet, exelix
  * @copyright libnx Authors
  */
 
@@ -15,6 +15,11 @@ void nifmExit(void);
 Result nifmGetCurrentIpAddress(u32* out);
 
 Result nifmIsWirelessCommunicationEnabled(bool* out);
+
+/**
+ * @note Works only if called from nifm:a or nifm:s.
+ */
+Result nifmSetWirelessCommunicationEnabled(bool enable);
 
 Result nifmIsEthernetCommunicationEnabled(bool* out);
 Result nifmIsAnyForegroundRequestAccepted(bool* out);

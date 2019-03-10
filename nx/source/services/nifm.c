@@ -9,6 +9,15 @@
 #include "arm/atomics.h"
 #include "runtime/hosversion.h"
 
+typedef enum {
+    NifmServiceType_NotInitialized = 0,
+    NifmServiceType_User = 1,
+    NifmServiceType_System = 2,
+    NifmServiceType_Admin = 3,
+} NifmServiceType;
+
+static NifmServiceType g_nifmServiceType = NifmServiceType_NotInitialized;
+
 static Service g_nifmSrv;
 static Service g_nifmIGS;
 static u64 g_refCnt;
@@ -22,9 +31,21 @@ Result nifmInitialize(void) {
     if (serviceIsActive(&g_nifmSrv))
         return 0;
 
-    Result rc;
-    rc = smGetService(&g_nifmSrv, "nifm:u");
-
+    Result rc = smGetService(&g_nifmSrv, "nifm:a");
+    g_nifmServiceType = NifmServiceType_Admin;
+    
+    if (R_FAILED(rc))
+    {
+        rc = smGetService(&g_nifmSrv, "nifm:s");
+        g_nifmServiceType = NifmServiceType_System;
+    }
+    
+    if (R_FAILED(rc))
+    {
+        rc = smGetService(&g_nifmSrv, "nifm:u");
+        g_nifmServiceType = NifmServiceType_User;
+    }
+    
     if (R_SUCCEEDED(rc)) rc = serviceConvertToDomain(&g_nifmSrv);
 
     if (R_SUCCEEDED(rc)) {
@@ -44,6 +65,7 @@ void nifmExit(void) {
     if (atomicDecrement64(&g_refCnt) == 0) {
         serviceClose(&g_nifmIGS);
         serviceClose(&g_nifmSrv);
+        g_nifmServiceType = NifmServiceType_NotInitialized;
     }
 }
 
@@ -114,6 +136,43 @@ Result nifmIsWirelessCommunicationEnabled(bool* out) {
 
         if (R_SUCCEEDED(rc) && out) 
             *out = resp->out != 0;
+    }
+
+    return rc;
+}
+
+Result nifmSetWirelessCommunicationEnabled(bool enable) {
+    if (g_nifmServiceType < NifmServiceType_System)
+        return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+
+    IpcCommand c;
+    ipcInitialize(&c);
+
+    struct {
+        u64 magic;
+        u64 cmd_id;
+        u8 value;
+    } *raw;
+
+    raw = serviceIpcPrepareHeader(&g_nifmIGS, &c, sizeof(*raw));
+
+    raw->magic = SFCI_MAGIC;
+    raw->cmd_id = 16;
+    raw->value = enable!= 0;
+
+    Result rc = serviceIpcDispatch(&g_nifmIGS);
+
+    if (R_SUCCEEDED(rc)) {
+        IpcParsedCommand r;     
+        struct {
+            u64 magic;
+            u64 result;
+        } *resp;
+
+        serviceIpcParse(&g_nifmIGS, &r, sizeof(*resp));
+        resp = r.Raw;
+
+        rc = resp->result;
     }
 
     return rc;
