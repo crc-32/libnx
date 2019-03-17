@@ -9,6 +9,7 @@
 
 typedef enum {
 	BatteryNotifType = 0xb90b,
+	LowBatNotifType = 0xba0b,
 	VolumeNotifType  = 0xe803,
     ScreenshotNotifType = 0x441f,
     ScreenshotUnkNotifType = 0x411f,
