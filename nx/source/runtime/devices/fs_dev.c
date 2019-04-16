@@ -283,13 +283,14 @@ static int _fsdevMountDevice(const char *name, FsFileSystem fs, fsdev_fsdevice *
 {
   fsdev_fsdevice *device = NULL;
 
+  _fsdevInit(); //Ensure fsdev is initialized
+
   if(fsdevFindDevice(name)) //Device is already mounted with the same name.
   {
     fsFsClose(&fs);
     return -1;
   }
 
-  _fsdevInit(); //Ensure fsdev is initialized
   device = fsdevFindDevice(NULL);
   if(device==NULL)
   {
@@ -484,6 +485,17 @@ FsFileSystem* fsdevGetDefaultFileSystem(void)
   if(fsdev_fsdevice_default==-1) return NULL;
 
   return &fsdev_fsdevices[fsdev_fsdevice_default].fs;
+}
+
+int fsdevTranslatePath(const char *path, FsFileSystem** device, char *outpath)
+{
+  fsdev_fsdevice *tmpdev = NULL;
+
+  int ret = fsdev_getfspath(_REENT, path, &tmpdev, outpath);
+  if(ret==-1)return ret;
+
+  if(device)*device = &tmpdev->fs;
+  return ret;
 }
 
 /*! Open a file
@@ -1587,7 +1599,8 @@ typedef struct
 static const error_map_t error_table[] =
 {
   /* keep this list sorted! */
-  { 0x202, ENOENT,       },
+  { 0x202, ENOENT,          },
+  { 0x402, EEXIST,          },
   { 0x2EE202, EINVAL,       },
   { 0x2EE602, ENAMETOOLONG, },
 };
