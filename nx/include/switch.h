@@ -86,8 +86,10 @@ extern "C" {
 #include "switch/services/capssc.h"
 #include "switch/services/capssu.h"
 #include "switch/services/nfc.h"
+#include "switch/services/wlaninf.h"
+#include "switch/services/pctl.h"
 #include "switch/services/ovln.h"
-
+  
 #include "switch/display/binder.h"
 #include "switch/display/parcel.h"
 #include "switch/display/buffer_producer.h"
@@ -106,6 +108,8 @@ extern "C" {
 #include "switch/audio/driver.h"
 
 #include "switch/applets/libapplet.h"
+#include "switch/applets/pctlauth.h"
+#include "switch/applets/error.h"
 #include "switch/applets/swkbd.h"
 #include "switch/applets/web.h"
 
@@ -120,6 +124,18 @@ extern "C" {
 #include "switch/runtime/devices/fs_dev.h"
 #include "switch/runtime/devices/romfs_dev.h"
 #include "switch/runtime/devices/socket.h"
+
+#include "switch/crypto/aes.h"
+#include "switch/crypto/aes_cbc.h"
+#include "switch/crypto/aes_ctr.h"
+#include "switch/crypto/aes_xts.h"
+#include "switch/crypto/cmac.h"
+
+#include "switch/crypto/sha256.h"
+#include "switch/crypto/sha1.h"
+#include "switch/crypto/hmac.h"
+
+#include "switch/crypto/crc.h"
 
 #ifdef __cplusplus
 }
