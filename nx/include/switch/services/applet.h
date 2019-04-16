@@ -8,6 +8,7 @@
 #pragma once
 #include "../types.h"
 #include "../services/sm.h"
+#include "../services/apm.h"
 #include "../kernel/tmem.h"
 #include "../kernel/event.h"
 
@@ -279,6 +280,20 @@ Result appletHomeButtonReaderLockAccessorGetEvent(Event *out_event);
 Result appletPushToGeneralChannel(AppletStorage *s);
 
 /**
+ * @brief Sets the \ref ApmCpuBoostMode.
+ * @note Only available with [7.0.0+] (not fully usable system-side with 6.x).
+ * @param mode \ref ApmCpuBoostMode.
+ */
+Result appletSetCpuBoostMode(ApmCpuBoostMode mode);
+
+/**
+ * @brief Gets the current PerformanceConfiguration.
+ * @note Only available with [7.0.0+].
+ * @param PerformanceConfiguration Output PerformanceConfiguration.
+ */
+Result appletGetCurrentPerformanceConfiguration(u32 *PerformanceConfiguration);
+
+/**
  * @brief Creates a LibraryApplet.
  * @param h AppletHolder object.
  * @param id See \ref AppletId.
@@ -314,6 +329,12 @@ Result appletHolderGetIndirectLayerConsumerHandle(AppletHolder *h, u64 *out);
  * @param h AppletHolder object.
  */
 Result appletHolderStart(AppletHolder *h);
+
+/**
+ * @brief Requests the LibraryApplet to exit. The command is only used if \ref appletHolderCheckFinished returns false.
+ * @param h AppletHolder object.
+ */
+Result appletHolderRequestExit(AppletHolder *h);
 
 /**
  * @brief Waits for the LibraryApplet to exit.

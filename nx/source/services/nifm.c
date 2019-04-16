@@ -25,25 +25,29 @@ static u64 g_refCnt;
 static Result _nifmCreateGeneralService(Service* out, u64 in);
 static Result _nifmCreateGeneralServiceOld(Service* out);
 
+void nifmSetServiceType(NifmServiceType serviceType) {
+    g_nifmServiceType = serviceType;
+}
+
 Result nifmInitialize(void) {
     atomicIncrement64(&g_refCnt);
 
     if (serviceIsActive(&g_nifmSrv))
         return 0;
-
-    Result rc = smGetService(&g_nifmSrv, "nifm:a");
-    g_nifmServiceType = NifmServiceType_Admin;
-    
-    if (R_FAILED(rc))
-    {
-        rc = smGetService(&g_nifmSrv, "nifm:s");
-        g_nifmServiceType = NifmServiceType_System;
-    }
-    
-    if (R_FAILED(rc))
-    {
-        rc = smGetService(&g_nifmSrv, "nifm:u");
-        g_nifmServiceType = NifmServiceType_User;
+  
+    Result rc = 0;
+    switch (g_nifmServiceType) {
+        case NifmServiceType_NotInitialized:
+        case NifmServiceType_User:
+            g_nifmServiceType = NifmServiceType_User;
+            rc = smGetService(&g_nifmSrv, "nifm:u");
+            break;
+        case NifmServiceType_System:
+            rc = smGetService(&g_nifmSrv, "nifm:s");
+            break;
+        case NifmServiceType_Admin:
+            rc = smGetService(&g_nifmSrv, "nifm:a");
+            break;
     }
     
     if (R_SUCCEEDED(rc)) rc = serviceConvertToDomain(&g_nifmSrv);
@@ -313,6 +317,54 @@ Result nifmWakeUp(void) {
         resp = r.Raw;
 
         rc = resp->result;
+    }
+
+    return rc;
+}
+
+Result nifmGetInternetConnectionStatus(NifmInternetConnectionType* connectionType, u32* wifiStrength, NifmInternetConnectionStatus* connectionStatus)
+{
+    IpcCommand c;
+    ipcInitialize(&c);
+
+    struct {
+        u64 magic;
+        u64 cmd_id;
+    } *raw;
+
+    raw = serviceIpcPrepareHeader(&g_nifmIGS, &c, sizeof(*raw));
+
+    raw->magic = SFCI_MAGIC;
+    raw->cmd_id = 18;
+
+    Result rc = serviceIpcDispatch(&g_nifmIGS);
+
+    if (R_SUCCEEDED(rc)) {
+        IpcParsedCommand r;
+
+        struct {
+            u64 magic;
+            u64 result;
+            u8 out1;
+            u8 out2;
+            u8 out3;
+        } PACKED *resp;
+
+        serviceIpcParse(&g_nifmIGS, &r, sizeof(*resp));
+        resp = r.Raw;
+
+        rc = resp->result;
+
+        if (R_SUCCEEDED(rc)) {
+            if (connectionType)
+                *connectionType = resp->out1;
+
+            if (wifiStrength)
+                *wifiStrength = resp->out2;
+
+            if (connectionStatus)
+                *connectionStatus = resp->out3;
+        }
     }
 
     return rc;
