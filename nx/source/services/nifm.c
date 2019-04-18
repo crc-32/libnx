@@ -9,13 +9,6 @@
 #include "arm/atomics.h"
 #include "runtime/hosversion.h"
 
-typedef enum {
-    NifmServiceType_NotInitialized = 0,
-    NifmServiceType_User = 1,
-    NifmServiceType_System = 2,
-    NifmServiceType_Admin = 3,
-} NifmServiceType;
-
 static NifmServiceType g_nifmServiceType = NifmServiceType_NotInitialized;
 
 static Service g_nifmSrv;
@@ -34,7 +27,7 @@ Result nifmInitialize(void) {
 
     if (serviceIsActive(&g_nifmSrv))
         return 0;
-  
+
     Result rc = 0;
     switch (g_nifmServiceType) {
         case NifmServiceType_NotInitialized:
