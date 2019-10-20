@@ -3,12 +3,21 @@
 #include "result.h"
 #include "kernel/ipc.h"
 #include "runtime/hosversion.h"
-#include "services/vi.h"
 #include "display/binder.h"
 
-static Result _binderIpcDispatch(void)
+static void* _binderIpcPrepareHeader(Binder* b, IpcCommand* cmd, size_t sizeof_raw)
 {
-    return serviceIpcDispatch(viGetSession_IHOSBinderDriverRelay());
+    return serviceIpcPrepareHeader(b->relay, cmd, sizeof_raw);
+}
+
+static Result _binderIpcDispatch(Binder* b)
+{
+    return serviceIpcDispatch(b->relay);
+}
+
+static Result _binderIpcParse(Binder* b, IpcParsedCommand* r, size_t sizeof_raw)
+{
+    return serviceIpcParse(b->relay, r, sizeof_raw);
 }
 
 void binderCreate(Binder* b, s32 id)
@@ -18,7 +27,7 @@ void binderCreate(Binder* b, s32 id)
     b->id = id;
 }
 
-Result binderInitSession(Binder* b)
+Result binderInitSession(Binder* b, Service* relay)
 {
     Result rc = 0;
 
@@ -28,23 +37,19 @@ Result binderInitSession(Binder* b)
     if (b->initialized)
         return MAKERESULT(Module_Libnx, LibnxError_AlreadyInitialized);
 
+    b->relay = relay;
+
     rc = binderIncreaseWeakRef(b);
     if (R_FAILED(rc))
         return rc;
 
     rc = binderIncreaseStrongRef(b);
     if (R_FAILED(rc)) {
-        binderDecreaseStrongRef(b);
+        binderDecreaseWeakRef(b);
         return rc;
     }
 
     b->initialized = true;
-
-    rc = ipcQueryPointerBufferSize(viGetSession_IHOSBinderDriverRelay()->handle, &b->ipc_buffer_size);
-    if (R_FAILED(rc)) {
-        binderClose(b);
-        return rc;
-    }
 
     // Use TransactParcelAuto when available.
     if (hosversionAtLeast(3,0,0))
@@ -92,23 +97,24 @@ static Result _binderTransactParcel(
     ipcAddSendBuffer(&c, parcel_data, parcel_data_size, 0);
     ipcAddRecvBuffer(&c, parcel_reply, parcel_reply_size, 0);
 
-    raw = ipcPrepareHeader(&c, sizeof(*raw));
+    raw = _binderIpcPrepareHeader(b, &c, sizeof(*raw));
     raw->magic = SFCI_MAGIC;
     raw->cmd_id = 0;
     raw->session_id = b->id;
     raw->code = code;
     raw->flags = flags;
 
-    Result rc = _binderIpcDispatch();
+    Result rc = _binderIpcDispatch(b);
 
     if (R_SUCCEEDED(rc)) {
         IpcParsedCommand r;
-        ipcParse(&r);
-
         struct {
             u64 magic;
             u64 result;
-        } *resp = r.Raw;
+        } *resp;
+
+        _binderIpcParse(b, &r, sizeof(*resp));
+        resp = r.Raw;
 
         rc = resp->result;
     }
@@ -136,26 +142,27 @@ static Result _binderTransactParcelAuto(
         u32 flags;
     } PACKED *raw;
 
-    ipcAddSendSmart(&c, b->ipc_buffer_size, parcel_data, parcel_data_size, 0);
-    ipcAddRecvSmart(&c, b->ipc_buffer_size, parcel_reply, parcel_reply_size, 0);
+    ipcAddSendSmart(&c, b->relay->pointer_buffer_size, parcel_data, parcel_data_size, 0);
+    ipcAddRecvSmart(&c, b->relay->pointer_buffer_size, parcel_reply, parcel_reply_size, 0);
 
-    raw = ipcPrepareHeader(&c, sizeof(*raw));
+    raw = _binderIpcPrepareHeader(b, &c, sizeof(*raw));
     raw->magic = SFCI_MAGIC;
     raw->cmd_id = 3;
     raw->session_id = b->id;
     raw->code = code;
     raw->flags = flags;
 
-    Result rc = _binderIpcDispatch();
+    Result rc = _binderIpcDispatch(b);
 
     if (R_SUCCEEDED(rc)) {
         IpcParsedCommand r;
-        ipcParse(&r);
-
         struct {
             u64 magic;
             u64 result;
-        } *resp = r.Raw;
+        } *resp;
+
+        _binderIpcParse(b, &r, sizeof(*resp));
+        resp = r.Raw;
 
         rc = resp->result;
     }
@@ -221,23 +228,24 @@ Result binderAdjustRefcount(Binder* b, s32 addval, s32 type)
         s32 type;
     } *raw;
 
-    raw = ipcPrepareHeader(&c, sizeof(*raw));
+    raw = _binderIpcPrepareHeader(b, &c, sizeof(*raw));
     raw->magic = SFCI_MAGIC;
     raw->cmd_id = 1;
     raw->session_id = b->id;
     raw->addval = addval;
     raw->type = type;
 
-    Result rc = _binderIpcDispatch();
+    Result rc = _binderIpcDispatch(b);
 
     if (R_SUCCEEDED(rc)) {
         IpcParsedCommand r;
-        ipcParse(&r);
-
         struct {
             u64 magic;
             u64 result;
-        } *resp = r.Raw;
+        } *resp;
+
+        _binderIpcParse(b, &r, sizeof(*resp));
+        resp = r.Raw;
 
         rc = resp->result;
     }
@@ -260,23 +268,24 @@ Result binderGetNativeHandle(Binder* b, u32 inval, Event *event_out)
         u32 inval;
     } *raw;
 
-    raw = ipcPrepareHeader(&c, sizeof(*raw));
+    raw = _binderIpcPrepareHeader(b, &c, sizeof(*raw));
 
     raw->magic = SFCI_MAGIC;
     raw->cmd_id = 2;
     raw->session_id = b->id;
     raw->inval = inval;
 
-    Result rc = _binderIpcDispatch();
+    Result rc = _binderIpcDispatch(b);
 
     if (R_SUCCEEDED(rc)) {
         IpcParsedCommand r;
-        ipcParse(&r);
-
         struct {
             u64 magic;
             u64 result;
         } *resp = r.Raw;
+
+        _binderIpcParse(b, &r, sizeof(*resp));
+        resp = r.Raw;
 
         rc = resp->result;
 

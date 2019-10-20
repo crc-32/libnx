@@ -15,6 +15,8 @@
 #include "runtime/env.h"
 #include "nro.h"
 
+#include "path_buf.h"
+
 typedef enum {
     RomfsSource_FsFile,
     RomfsSource_FsStorage,
@@ -40,8 +42,6 @@ typedef struct romfs_mount
 extern int __system_argc;
 extern char** __system_argv;
 
-static char __thread __component[PATH_MAX+1];
-
 #define romFS_root(m)   ((romfs_dir*)(m)->dirTable)
 #define romFS_dir(m,x)  ((romfs_dir*) ((u8*)(m)->dirTable  + (x)))
 #define romFS_file(m,x) ((romfs_file*)((u8*)(m)->fileTable + (x)))
@@ -52,11 +52,11 @@ static char __thread __component[PATH_MAX+1];
 static ssize_t _romfs_read(romfs_mount *mount, u64 offset, void* buffer, u64 size)
 {
     u64 pos = mount->offset + offset;
-    size_t read = 0;
+    u64 read = 0;
     Result rc = 0;
     if(mount->fd_type == RomfsSource_FsFile)
     {
-        rc = fsFileRead(&mount->fd, pos, buffer, size, &read);
+        rc = fsFileRead(&mount->fd, pos, buffer, size, FsReadOption_None, &read);
     }
     else if(mount->fd_type == RomfsSource_FsStorage)
     {
@@ -170,7 +170,7 @@ static romfs_mount *romfsFindMount(const char *name)
         }
         else if(mount->setup) //Find the mount with the input name.
         {
-            if(strncmp(mount->name, name, strlen(mount->name))==0)
+            if(strncmp(mount->name, name, sizeof(mount->name))==0)
                 return mount;
         }
     }
@@ -233,10 +233,10 @@ Result romfsMount(const char *name)
             filename += 5;
         else if (strncmp(filename, "nxlink:/", 8) == 0)
         {
-            strncpy(__component, "/switch",     PATH_MAX);
-            strncat(__component, filename+7, PATH_MAX);
-            __component[PATH_MAX] = 0;
-            filename = __component;
+            strncpy(__nx_dev_path_buf, "/switch",  PATH_MAX);
+            strncat(__nx_dev_path_buf, filename+7, PATH_MAX);
+            __nx_dev_path_buf[PATH_MAX] = 0;
+            filename = __nx_dev_path_buf;
         }
         else
         {
@@ -244,7 +244,7 @@ Result romfsMount(const char *name)
             return 2;
         }
 
-        Result rc = fsFsOpenFile(sdfs, filename, FS_OPEN_READ, &mount->fd);
+        Result rc = fsFsOpenFile(sdfs, filename, FsOpenMode_Read, &mount->fd);
         if (R_FAILED(rc))
         {
             romfs_free(mount);
@@ -317,6 +317,16 @@ Result romfsMountFromStorage(FsStorage storage, u64 offset, const char *name)
     return romfsMountCommon(name, mount);
 }
 
+Result romfsMountFromCurrentProcess(const char *name) {
+    FsStorage storage;
+
+    Result rc = fsOpenDataStorageByCurrentProcess(&storage);
+    if (R_FAILED(rc))
+        return rc;
+
+    return romfsMountFromStorage(storage, 0, name);
+}
+
 Result romfsMountFromFsdev(const char *path, u64 offset, const char *name)
 {
     FsFileSystem *tmpfs = NULL;
@@ -334,7 +344,7 @@ Result romfsMountFromFsdev(const char *path, u64 offset, const char *name)
     mount->fd_type = RomfsSource_FsFile;
     mount->offset = offset;
 
-    Result rc = fsFsOpenFile(tmpfs, filepath, FS_OPEN_READ, &mount->fd);
+    Result rc = fsFsOpenFile(tmpfs, filepath, FsOpenMode_Read, &mount->fd);
     if (R_FAILED(rc))
     {
         romfs_free(mount);
@@ -392,6 +402,7 @@ Result romfsMountCommon(const char *name, romfs_mount *mount)
     if(AddDevice(&mount->device) < 0)
         goto fail;
 
+    mount->setup = true;
     return 0;
 
 fail:
@@ -407,10 +418,18 @@ static void romfsInitMtime(romfs_mount *mount)
 Result romfsUnmount(const char *name)
 {
     romfs_mount *mount;
+    char tmpname[34];
 
     mount = romfsFindMount(name);
     if (mount == NULL)
         return -1;
+
+    // Remove device
+    memset(tmpname, 0, sizeof(tmpname));
+    strncpy(tmpname, mount->name, sizeof(tmpname)-2);
+    strncat(tmpname, ":", sizeof(tmpname)-strlen(tmpname)-1);
+
+    RemoveDevice(tmpname);
 
     romfs_mountclose(mount);
 
@@ -482,7 +501,7 @@ static int navigateToDir(romfs_mount *mount, romfs_dir** ppDir, const char** pPa
     while (**pPath)
     {
         char* slashPos = strchr(*pPath, '/');
-        char* component = __component;
+        char* component = __nx_dev_path_buf;
 
         if (slashPos)
         {

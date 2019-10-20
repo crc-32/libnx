@@ -10,14 +10,14 @@
 
 /// CommonArguments
 typedef struct {
-    u32 CommonArgs_version;
-    u32 CommonArgs_size;
+    u32 CommonArgs_version;  ///< \ref libappletArgsCreate sets this to 1, and \ref libappletArgsPop requires value 1. v0 is not supported.
+    u32 CommonArgs_size;     ///< Size of this struct.
 
-    u32 LaVersion;           ///< LibraryApplet API version
+    u32 LaVersion;           ///< LibraryApplet API version.
     s32 ExpectedThemeColor;  ///< Set to the output from \ref appletGetThemeColorType by \ref libappletArgsCreate.
     u8  PlayStartupSound;    ///< bool flag, default is false.
-    u8  pad[7];
-    u64 tick;
+    u8  pad[7];              ///< Padding.
+    u64 tick;                ///< System tick. Set to the output from \ref armGetSystemTick during \ref libappletArgsPush.
 } LibAppletArgs;
 
 /**
@@ -59,6 +59,12 @@ Result libappletReadStorage(AppletStorage* s, void* buffer, size_t size, size_t 
 Result libappletArgsPush(LibAppletArgs* a, AppletHolder *h);
 
 /**
+ * @brief Uses \ref appletPopInData and reads it to the specified LibAppletArgs. The LibAppletArgs is validated, an error is thrown when invalid.
+ * @param[out] a LibAppletArgs struct.
+ */
+Result libappletArgsPop(LibAppletArgs* a);
+
+/**
  * @brief Creates a storage using the input buffer which is pushed to the AppletHolder via \ref appletHolderPushInData.
  * @param h AppletHolder object.
  * @param buffer Input data buffer.
@@ -76,7 +82,13 @@ Result libappletPushInData(AppletHolder *h, const void* buffer, size_t size);
 Result libappletPopOutData(AppletHolder *h, void* buffer, size_t size, size_t *transfer_size);
 
 /**
- * @brief Starts the applet and waits for it to finish, then checks the \ref LibAppletExitReason.
+ * @brief Sets whether \ref libappletStart uses \ref appletHolderJump.
+ * @param flag Flag. Value true should not be used unless running as AppletType_LibraryApplet.
+ */
+void libappletSetJumpFlag(bool flag);
+
+/**
+ * @brief If the flag from \ref libappletSetJumpFlag is set, this just uses \ref appletHolderJump. Otherwise, starts the applet and waits for it to finish, then checks the \ref LibAppletExitReason.
  * @note Uses \ref appletHolderStart and \ref appletHolderJoin.
  * @param h AppletHolder object.
  */

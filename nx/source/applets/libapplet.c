@@ -5,6 +5,8 @@
 #include "services/applet.h"
 #include "applets/libapplet.h"
 
+static bool g_libappletJumpFlag;
+
 void libappletArgsCreate(LibAppletArgs* a, u32 version) {
     memset(a, 0, sizeof(LibAppletArgs));
 
@@ -69,6 +71,28 @@ Result libappletArgsPush(LibAppletArgs* a, AppletHolder *h) {
     return _libappletPushInData(h, a, sizeof(LibAppletArgs));
 }
 
+Result libappletArgsPop(LibAppletArgs* a) {
+    //Official sw stores the header in LibAppletArgs seperately (first 8-bytes), but here we're including it with the LibAppletCommonArguments struct.
+    //Official sw uses appletStorageRead twice, for reading the header then the rest of the struct.
+
+    AppletStorage storage;
+    s64 tmpsize=0;
+    size_t tmpsize2=0;
+    Result rc=0;
+    memset(a, 0, sizeof(LibAppletArgs));
+    rc = appletPopInData(&storage);
+
+    if (R_SUCCEEDED(rc)) rc = appletStorageGetSize(&storage, &tmpsize);
+    if (R_SUCCEEDED(rc) && tmpsize != sizeof(LibAppletArgs)) rc = MAKERESULT(Module_Libnx, LibnxError_BadInput);
+
+    if (R_SUCCEEDED(rc)) rc = libappletReadStorage(&storage, a, sizeof(LibAppletArgs), &tmpsize2);
+    if (R_SUCCEEDED(rc) && tmpsize2 != sizeof(LibAppletArgs)) rc = MAKERESULT(Module_Libnx, LibnxError_BadInput);
+    if (R_SUCCEEDED(rc)) {
+        if (a->CommonArgs_version != 1 || a->CommonArgs_size != sizeof(LibAppletArgs)) rc = MAKERESULT(Module_Libnx, LibnxError_BadInput);
+    }
+    return rc;
+}
+
 static Result _libappletQlaunchRequest(u8* buf, size_t size) {
     Result rc=0;
     AppletStorage storage;
@@ -95,8 +119,15 @@ Result libappletPopOutData(AppletHolder *h, void* buffer, size_t size, size_t *t
     return rc;
 }
 
+void libappletSetJumpFlag(bool flag) {
+    g_libappletJumpFlag = flag;
+}
+
 Result libappletStart(AppletHolder *h) {
     Result rc=0;
+
+    if (g_libappletJumpFlag)
+        return appletHolderJump(h);
 
     rc = appletHolderStart(h);
 

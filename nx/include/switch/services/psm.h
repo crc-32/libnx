@@ -6,7 +6,7 @@
  */
 #pragma once
 #include "../types.h"
-#include "../services/sm.h"
+#include "../sf/service.h"
 #include "../kernel/event.h"
 
 typedef enum {
@@ -30,6 +30,7 @@ typedef struct {
 
 Result psmInitialize(void);
 void psmExit(void);
+Service* psmGetServiceSession(void);
 
 Result psmGetBatteryChargePercentage(u32 *out);
 Result psmGetChargerType(ChargerType *out);

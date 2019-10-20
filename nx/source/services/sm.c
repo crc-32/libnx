@@ -1,13 +1,9 @@
 // Copyright 2017 plutoo
-#include "types.h"
-#include "result.h"
-#include "arm/atomics.h"
-#include "kernel/ipc.h"
+#define NX_SERVICE_ASSUME_NON_DOMAIN
+#include "service_guard.h"
 #include "services/fatal.h"
-#include "services/sm.h"
 
-static Handle g_smHandle = INVALID_HANDLE;
-static u64 g_refCnt;
+static Service g_smSrv;
 
 #define MAX_OVERRIDES 32
 
@@ -33,117 +29,65 @@ void smAddOverrideHandle(u64 name, Handle handle)
 
 Handle smGetServiceOverride(u64 name)
 {
-    size_t i;
-
-    for (i=0; i<g_smOverridesNum; i++)
-    {
+    for (size_t i = 0; i < g_smOverridesNum; i++)
         if (g_smOverrides[i].name == name)
             return g_smOverrides[i].handle;
-    }
 
     return INVALID_HANDLE;
 }
 
-bool smHasInitialized(void) {
-    return g_smHandle != INVALID_HANDLE;
-}
+NX_GENERATE_SERVICE_GUARD(sm);
 
-Result smInitialize(void)
+Result _smInitialize(void)
 {
-    atomicIncrement64(&g_refCnt);
-
-    if (smHasInitialized())
-        return 0;
-
-    Result rc = svcConnectToNamedPort(&g_smHandle, "sm:");
-    Handle tmp;
-
-    if (R_SUCCEEDED(rc) && smGetServiceOriginal(&tmp, smEncodeName("")) == 0x415) {
-        IpcCommand c;
-        ipcInitialize(&c);
-        ipcSendPid(&c);
-
-        struct {
-            u64 magic;
-            u64 cmd_id;
-            u64 zero;
-            u64 reserved[2];
-        } *raw;
-
-        raw = ipcPrepareHeader(&c, sizeof(*raw));
-
-        raw->magic = SFCI_MAGIC;
-        raw->cmd_id = 0;
-        raw->zero = 0;
-
-        rc = ipcDispatch(g_smHandle);
-
-        if (R_SUCCEEDED(rc)) {
-            IpcParsedCommand r;
-            ipcParse(&r);
-
-            struct {
-                u64 magic;
-                u64 result;
-            } *resp = r.Raw;
-
-            rc = resp->result;
-        }
+    Handle sm_handle;
+    Result rc = svcConnectToNamedPort(&sm_handle, "sm:");
+    while (R_VALUE(rc) == KERNELRESULT(NotFound)) {
+        svcSleepThread(50000000ul);
+        rc = svcConnectToNamedPort(&sm_handle, "sm:");
     }
 
-    if (R_FAILED(rc))
-        smExit();
+    if (R_SUCCEEDED(rc)) {
+        serviceCreate(&g_smSrv, sm_handle);
+    }
+
+    Handle tmp;
+    if (R_SUCCEEDED(rc) && smGetServiceOriginal(&tmp, smEncodeName("")) == 0x415) {
+        const struct {
+            u64 pid_placeholder;
+        } in = { 0 };
+
+        rc = serviceDispatchIn(&g_smSrv, 0, in, .in_send_pid = true);
+    }
 
     return rc;
 }
 
-void smExit(void)
+void _smCleanup(void)
 {
-    if (atomicDecrement64(&g_refCnt) == 0)
-    {
-        ipcCloseSession(g_smHandle);
-        svcCloseHandle(g_smHandle);
-        g_smHandle = INVALID_HANDLE;
-    }
+    serviceClose(&g_smSrv);
 }
 
-u64 smEncodeName(const char* name)
+Service *smGetServiceSession(void)
 {
-    u64 name_encoded = 0;
-    size_t i;
-
-    for (i=0; i<8; i++)
-    {
-        if (name[i] == '\0')
-            break;
-
-        name_encoded |= ((u64) name[i]) << (8*i);
-    }
-
-    return name_encoded;
+    return &g_smSrv;
 }
 
 Result smGetService(Service* service_out, const char* name)
 {
     u64 name_encoded = smEncodeName(name);
     Handle handle = smGetServiceOverride(name_encoded);
-    Result rc;
+    bool own_handle = false;
+    Result rc = 0;
 
-    if (handle != INVALID_HANDLE)
-    {
-        service_out->type = ServiceType_Override;
-        service_out->handle = handle;
-        rc = 0;
-    }
-    else
-    {
+    if (handle == INVALID_HANDLE) {
+        own_handle = true;
         rc = smGetServiceOriginal(&handle, name_encoded);
+    }
 
-        if (R_SUCCEEDED(rc))
-        {
-            service_out->type = ServiceType_Normal;
-            service_out->handle = handle;
-        }
+    if (R_SUCCEEDED(rc)) {
+        serviceCreate(service_out, handle);
+        service_out->own_handle = own_handle;
     }
 
     return rc;
@@ -151,114 +95,35 @@ Result smGetService(Service* service_out, const char* name)
 
 Result smGetServiceOriginal(Handle* handle_out, u64 name)
 {
-    IpcCommand c;
-    ipcInitialize(&c);
-
-    struct {
-        u64 magic;
-        u64 cmd_id;
+    const struct {
         u64 service_name;
-        u64 reserved[2];
-    } *raw;
+    } in = { name };
 
-    raw = ipcPrepareHeader(&c, sizeof(*raw));
-
-    raw->magic = SFCI_MAGIC;
-    raw->cmd_id = 1;
-    raw->service_name = name;
-
-    Result rc = ipcDispatch(g_smHandle);
-
-    if (R_SUCCEEDED(rc)) {
-        IpcParsedCommand r;
-        ipcParse(&r);
-
-        struct {
-            u64 magic;
-            u64 result;
-        } *resp = r.Raw;
-
-        rc = resp->result;
-
-        if (R_SUCCEEDED(rc)) {
-            *handle_out = r.Handles[0];
-        }
-    }
-
-    return rc;
+    return serviceDispatchIn(&g_smSrv, 1, in,
+        .out_handle_attrs = { SfOutHandleAttr_HipcMove },
+        .out_handles = handle_out,
+    );
 }
 
-Result smRegisterService(Handle* handle_out, const char* name, bool is_light, int max_sessions) {
-    IpcCommand c;
-    ipcInitialize(&c);
-
-    struct {
-        u64 magic;
-        u64 cmd_id;
+Result smRegisterService(Handle* handle_out, const char* name, bool is_light, int max_sessions)
+{
+    const struct {
         u64 service_name;
         u32 is_light;
         u32 max_sessions;
-    } *raw;
+    } in = { smEncodeName(name), !!is_light, max_sessions };
 
-    raw = ipcPrepareHeader(&c, sizeof(*raw));
-
-    raw->magic = SFCI_MAGIC;
-    raw->cmd_id = 2;
-    raw->service_name = smEncodeName(name);
-    raw->is_light = !!is_light;
-    raw->max_sessions = max_sessions;
-
-    Result rc = ipcDispatch(g_smHandle);
-
-    if (R_SUCCEEDED(rc)) {
-        IpcParsedCommand r;
-        ipcParse(&r);
-
-        struct {
-            u64 magic;
-            u64 result;
-        } *resp = r.Raw;
-
-        rc = resp->result;
-
-        if (R_SUCCEEDED(rc)) {
-            *handle_out = r.Handles[0];
-        }
-    }
-
-    return rc;
+    return serviceDispatchIn(&g_smSrv, 2, in,
+        .out_handle_attrs = { SfOutHandleAttr_HipcMove },
+        .out_handles = handle_out,
+    );
 }
 
-Result smUnregisterService(const char* name) {
-    IpcCommand c;
-    ipcInitialize(&c);
-
-    struct {
-        u64 magic;
-        u64 cmd_id;
+Result smUnregisterService(const char* name)
+{
+    const struct {
         u64 service_name;
-        u64 reserved;
-    } *raw;
+    } in = { smEncodeName(name) };
 
-    raw = ipcPrepareHeader(&c, sizeof(*raw));
-
-    raw->magic = SFCI_MAGIC;
-    raw->cmd_id = 3;
-    raw->service_name = smEncodeName(name);
-
-    Result rc = ipcDispatch(g_smHandle);
-
-    if (R_SUCCEEDED(rc)) {
-        IpcParsedCommand r;
-        ipcParse(&r);
-
-        struct {
-            u64 magic;
-            u64 result;
-        } *resp = r.Raw;
-
-        rc = resp->result;
-    }
-
-    return rc;
+    return serviceDispatchIn(&g_smSrv, 3, in);
 }

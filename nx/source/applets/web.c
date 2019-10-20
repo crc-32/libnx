@@ -79,7 +79,11 @@ static void _webArgInitialize(WebCommonConfig* config, AppletId appletid, WebShi
     config->appletid = appletid;
 
     u32 hosver = hosversionGet();
-    if (hosver >= MAKEHOSVERSION(5,0,0))
+    if (hosver >= MAKEHOSVERSION(8,0,0))
+        config->version = 0x80000;
+    else if (hosver >= MAKEHOSVERSION(6,0,0))
+        config->version = 0x60000;
+    else if (hosver >= MAKEHOSVERSION(5,0,0))
         config->version = 0x50000;
     else if (hosver >= MAKEHOSVERSION(3,0,0))
         config->version = 0x30000;
@@ -346,11 +350,12 @@ Result webOfflineCreate(WebCommonConfig* config, WebDocumentKind docKind, u64 ti
 
 Result webShareCreate(WebCommonConfig* config, WebShareStartPage page) {
     Result rc=0;
+    AccountUid uid={0};
 
     _webArgInitialize(config, AppletId_loginShare, WebShimKind_Share);
 
     rc = webConfigSetLeftStickMode(config, WebLeftStickMode_Cursor);
-    if (R_SUCCEEDED(rc)) rc = webConfigSetUserID(config, 0);
+    if (R_SUCCEEDED(rc)) rc = webConfigSetUid(config, &uid);
     if (R_SUCCEEDED(rc)) rc = webConfigSetDisplayUrlKind(config, true);
 
     if (R_SUCCEEDED(rc)) rc = _webConfigSetU8(config, WebArgType_Unknown14, 1);
@@ -364,6 +369,7 @@ Result webShareCreate(WebCommonConfig* config, WebShareStartPage page) {
 
 Result webLobbyCreate(WebCommonConfig* config) {
     Result rc=0;
+    AccountUid uid={0};
     if (hosversionBefore(2,0,0)) return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
 
     _webArgInitialize(config, AppletId_loginShare, WebShimKind_Lobby);
@@ -371,7 +377,7 @@ Result webLobbyCreate(WebCommonConfig* config) {
     rc = webConfigSetLeftStickMode(config, WebLeftStickMode_Cursor);
     if (R_SUCCEEDED(rc) && config->version >= 0x30000) rc = webConfigSetPointer(config, false); // Added to user-process init with [3.0.0+].
 
-    if (R_SUCCEEDED(rc)) rc = webConfigSetUserID(config, 0);
+    if (R_SUCCEEDED(rc)) rc = webConfigSetUid(config, &uid);
 
     if (R_SUCCEEDED(rc)) rc = _webConfigSetU8(config, WebArgType_Unknown14, 1);
     if (R_SUCCEEDED(rc)) rc = _webConfigSetU8(config, WebArgType_Unknown15, 1);
@@ -398,10 +404,10 @@ Result webConfigSetWhitelist(WebCommonConfig* config, const char* whitelist) {
     return _webConfigSetString(config, WebArgType_Whitelist, whitelist, 0x1000);
 }
 
-Result webConfigSetUserID(WebCommonConfig* config, u128 userID) {
+Result webConfigSetUid(WebCommonConfig* config, AccountUid *uid) {
     WebShimKind shim = _webGetShimKind(config);
     if (shim != WebShimKind_Share && shim != WebShimKind_Web && shim != WebShimKind_Lobby) return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
-    return _webTLVSet(config, WebArgType_UserID, &userID, sizeof(userID));
+    return _webTLVSet(config, WebArgType_Uid, uid, sizeof(*uid));
 }
 
 static Result _webConfigSetAlbumEntryTLV(WebCommonConfig* config, WebArgType type, const CapsAlbumEntry *entry) {
@@ -683,14 +689,25 @@ Result webConfigSetOverrideMediaAudioVolume(WebCommonConfig* config, float value
     return _webConfigSetFloat(config, WebArgType_OverrideMediaAudioVolume, value);
 }
 
+Result webConfigSetMediaPlayerUi(WebCommonConfig* config, bool flag) {
+    if (_webGetShimKind(config) != WebShimKind_Offline) return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+    if (hosversionBefore(8,0,0)) return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+    return _webConfigSetFlag(config, WebArgType_MediaPlayerUi, flag);
+}
+
 Result webConfigShow(WebCommonConfig* config, WebCommonReply *out) {
     void* reply = NULL;
     size_t size = 0;
+    WebShimKind shimKind = _webGetShimKind(config);
 
     if (out) {
         // ShareApplet on [3.0.0+] uses TLV storage for the reply, while older versions + everything else uses *ReturnValue.
+        // Web also uses TLV storage for the reply on [8.0.0+].
         memset(out, 0, sizeof(*out));
-        if (config->version >= 0x30000 && _webGetShimKind(config) == WebShimKind_Share) out->type = true;
+        out->shimKind = shimKind;
+
+        if (config->version >= 0x30000 && shimKind == WebShimKind_Share) out->type = true;
+        if (config->version >= 0x80000 && shimKind == WebShimKind_Web) out->type = true;
 
         if (!out->type) {
             reply = &out->ret;
@@ -756,6 +773,8 @@ Result webReplyGetLastUrl(WebCommonReply *reply, char *outstr, size_t outstr_max
 }
 
 Result webReplyGetSharePostResult(WebCommonReply *reply, u32 *sharePostResult) {
+    if (reply->shimKind != WebShimKind_Share) return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+
     if (reply->type) {
         return _webTLVRead(&reply->storage, WebReplyType_SharePostResult, sharePostResult, sizeof(*sharePostResult));
     }
@@ -763,10 +782,25 @@ Result webReplyGetSharePostResult(WebCommonReply *reply, u32 *sharePostResult) {
 }
 
 Result webReplyGetPostServiceName(WebCommonReply *reply, char *outstr, size_t outstr_maxsize, size_t *out_size) {
+    if (reply->shimKind != WebShimKind_Share) return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+
     return _webReplyGetString(reply, WebReplyType_PostServiceName, WebReplyType_PostServiceNameSize, outstr, outstr_maxsize, out_size);
 }
 
 Result webReplyGetPostId(WebCommonReply *reply, char *outstr, size_t outstr_maxsize, size_t *out_size) {
+    if (reply->shimKind != WebShimKind_Share) return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+
     return _webReplyGetString(reply, WebReplyType_PostId, WebReplyType_PostIdSize, outstr, outstr_maxsize, out_size);
+}
+
+Result webReplyGetMediaPlayerAutoClosedByCompletion(WebCommonReply *reply, bool *flag) {
+    Result rc=0;
+    u8 tmpflag=0;
+    if (!reply->type) return MAKERESULT(Module_Libnx, LibnxError_BadInput);
+    if (reply->shimKind != WebShimKind_Web) return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+
+    rc = _webTLVRead(&reply->storage, WebReplyType_MediaPlayerAutoClosedByCompletion, &tmpflag, sizeof(tmpflag));
+    if (R_SUCCEEDED(rc) && flag) *flag = tmpflag!=0;
+    return rc;
 }
 

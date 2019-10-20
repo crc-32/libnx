@@ -6,11 +6,12 @@
  */
 #pragma once
 #include "../types.h"
-#include "../services/sm.h"
+#include "../sf/service.h"
 #include "../services/fs.h"
 
 Result fsldrInitialize(void);
 void fsldrExit(void);
+Service* fsldrGetServiceSession(void);
 
 Result fsldrOpenCodeFileSystem(u64 tid, const char *path, FsFileSystem* out);
 Result fsldrIsArchivedProgram(u64 pid, bool *out);

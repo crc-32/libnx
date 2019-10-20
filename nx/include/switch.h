@@ -36,8 +36,12 @@ extern "C" {
 #include "switch/kernel/detect.h"
 #include "switch/kernel/random.h"
 #include "switch/kernel/jit.h"
-#include "switch/kernel/ipc.h"
+#include "switch/kernel/ipc.h" // Deprecated
 #include "switch/kernel/barrier.h"
+
+#include "switch/sf/hipc.h"
+#include "switch/sf/cmif.h"
+#include "switch/sf/service.h"
 
 #include "switch/services/sm.h"
 #include "switch/services/smm.h"
@@ -47,6 +51,7 @@ extern "C" {
 #include "switch/services/acc.h"
 #include "switch/services/apm.h"
 #include "switch/services/applet.h"
+#include "switch/services/async.h"
 #include "switch/services/audin.h"
 #include "switch/services/audout.h"
 #include "switch/services/audren.h"
@@ -58,6 +63,7 @@ extern "C" {
 #include "switch/services/gpio.h"
 #include "switch/services/bpc.h"
 #include "switch/services/pcv.h"
+#include "switch/services/clkrst.h"
 #include "switch/services/psm.h"
 #include "switch/services/spsm.h"
 //#include "switch/services/bsd.h" Use switch/runtime/devices/socket.h instead
@@ -67,6 +73,7 @@ extern "C" {
 #include "switch/services/usbds.h"
 #include "switch/services/usbhs.h"
 #include "switch/services/hid.h"
+#include "switch/services/hiddbg.h"
 #include "switch/services/hidsys.h"
 #include "switch/services/irs.h"
 #include "switch/services/pl.h"
@@ -76,6 +83,7 @@ extern "C" {
 #include "switch/services/ns.h"
 #include "switch/services/ldr.h"
 #include "switch/services/ro.h"
+#include "switch/services/ts.h"
 #include "switch/services/pm.h"
 #include "switch/services/set.h"
 #include "switch/services/lr.h"
@@ -83,6 +91,7 @@ extern "C" {
 #include "switch/services/ncm.h"
 #include "switch/services/psc.h"
 #include "switch/services/caps.h"
+#include "switch/services/capsu.h"
 #include "switch/services/capssc.h"
 #include "switch/services/capssu.h"
 #include "switch/services/nfc.h"
@@ -91,6 +100,10 @@ extern "C" {
 #include "switch/services/ovln.h"
 #include "switch/services/npns.h"
   
+#include "switch/services/pdm.h"
+#include "switch/services/grc.h"
+#include "switch/services/friends.h"
+
 #include "switch/display/binder.h"
 #include "switch/display/parcel.h"
 #include "switch/display/buffer_producer.h"
@@ -109,6 +122,8 @@ extern "C" {
 #include "switch/audio/driver.h"
 
 #include "switch/applets/libapplet.h"
+#include "switch/applets/album_la.h"
+#include "switch/applets/friends_la.h"
 #include "switch/applets/pctlauth.h"
 #include "switch/applets/error.h"
 #include "switch/applets/swkbd.h"

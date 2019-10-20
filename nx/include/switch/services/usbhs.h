@@ -6,7 +6,7 @@
  */
 #pragma once
 #include "../types.h"
-#include "../services/sm.h"
+#include "../sf/service.h"
 #include "../services/usb.h"
 #include "../kernel/event.h"
 
@@ -100,9 +100,14 @@ typedef struct {
     struct usb_endpoint_descriptor desc;
 } UsbHsClientEpSession;
 
-/// Initialize/exit usb:hs.
+/// Initialize usb:hs.
 Result usbHsInitialize(void);
+
+/// Exit usb:hs.
 void usbHsExit(void);
+
+/// Gets the Service object for the actual usb:hs service session.
+Service* usbHsGetServiceSession(void);
 
 /// Returns the Event loaded during init with autoclear=false.
 /// Signaled when a device was removed.
@@ -137,12 +142,12 @@ Result usbHsQueryAcquiredInterfaces(UsbHsInterface* interfaces, size_t interface
 
 /**
  * @brief Creates an event which is signaled when an interface is available which passes the filtering checks.
- * @param[out] event Event object.
+ * @param[out] out_event Event object.
  * @param[in] autoclear Event autoclear.
  * @param[in] index Event index, must be 0..2.
  * @param[in] filter \ref UsbHsInterfaceFilter.
  */
-Result usbHsCreateInterfaceAvailableEvent(Event* event, bool autoclear, u8 index, const UsbHsInterfaceFilter* filter);
+Result usbHsCreateInterfaceAvailableEvent(Event* out_event, bool autoclear, u8 index, const UsbHsInterfaceFilter* filter);
 
 /**
  * @brief Destroys an event setup by \ref usbHsCreateInterfaceAvailableEvent. This *must* be used at some point during cleanup.
@@ -196,7 +201,7 @@ Result usbHsIfGetInterface(UsbHsClientIfSession* s, UsbHsInterfaceInfo* inf);
  */
 Result usbHsIfGetAlternateInterface(UsbHsClientIfSession* s, UsbHsInterfaceInfo* inf, u8 id);
 
-/// On 1.0.0 this is stubbed, just returns 0 with out=0.
+/// On [1.0.0] this is stubbed, just returns 0 with out=0.
 Result usbHsIfGetCurrentFrame(UsbHsClientIfSession* s, u32* out);
 
 /// Uses a control transfer, this will block until the transfer finishes. The buffer address and size should be aligned to 0x1000-bytes, where wLength is the original size.

@@ -19,8 +19,13 @@ typedef struct
   FsDir             fd;            ///< File descriptor
   ssize_t           index;         ///< Current entry index
   size_t            size;          ///< Current batch size
-  FsDirectoryEntry entry_data[32]; ///< Temporary storage for reading entries
 } fsdev_dir_t;
+
+/// Retrieves a pointer to temporary stage for reading entries
+NX_CONSTEXPR FsDirectoryEntry* fsdevDirGetEntries(fsdev_dir_t *dir)
+{
+  return (FsDirectoryEntry*)(void*)(dir+1);
+}
 
 /// Initializes and mounts the sdmc device if accessible. Also initializes current working directory to point to the folder containing the path to the executable (argv[0]), if it is provided by the environment.
 Result fsdevMountSdmc(void);
@@ -42,11 +47,20 @@ FsFileSystem* fsdevGetDeviceFileSystem(const char *name);
 /// Returns the FsFileSystem for the default device (SD card), if mounted. Used internally by romfs_dev.
 FsFileSystem* fsdevGetDefaultFileSystem(void);
 
-/// Writes the FS-path to outpath (which has buffer size FS_MAX_PATH), for the input device path. The FsFileSystem is also written to device when not NULL.
+/// Writes the FS-path to outpath (which has buffer size FS_MAX_PATH), for the input path (as used in stdio). The FsFileSystem is also written to device when not NULL.
 int fsdevTranslatePath(const char *path, FsFileSystem** device, char *outpath);
 
-/// This calls fsFsSetArchiveBit on the filesystem specified by the input absolute path. 
+/// This calls fsFsSetArchiveBit on the filesystem specified by the input path (as used in stdio).
 Result fsdevSetArchiveBit(const char *path);
+
+/// This calls fsFsCreateFile on the filesystem specified by the input path (as used in stdio).
+Result fsdevCreateFile(const char* path, size_t size, u32 flags);
+
+/// Recursively deletes the directory specified by the input path (as used in stdio).
+Result fsdevDeleteDirectoryRecursively(const char *path);
 
 /// Unmounts all devices and cleans up any resources used by the FS driver.
 Result fsdevUnmountAll(void);
+
+/// Retrieves the last native result code generated during a failed fsdev operation.
+Result fsdevGetLastResult(void);

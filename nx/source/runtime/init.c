@@ -72,8 +72,8 @@ void __attribute__((weak)) __libnx_initheap(void)
     }
     else {
         if (__nx_heap_size==0) {
-            svcGetInfo(&mem_available, 6, CUR_PROCESS_HANDLE, 0);
-            svcGetInfo(&mem_used, 7, CUR_PROCESS_HANDLE, 0);
+            svcGetInfo(&mem_available, InfoType_TotalMemorySize, CUR_PROCESS_HANDLE, 0);
+            svcGetInfo(&mem_used, InfoType_UsedMemorySize, CUR_PROCESS_HANDLE, 0);
             if (mem_available > mem_used+0x200000)
                 size = (mem_available - mem_used - 0x200000) & ~0x1FFFFF;
             if (size==0)
@@ -109,13 +109,15 @@ void __attribute__((weak)) __appInit(void)
     if (R_FAILED(rc))
         fatalSimple(MAKERESULT(Module_Libnx, LibnxError_InitFail_SM));
 
-    rc = setsysInitialize();
-    if (R_SUCCEEDED(rc)) {
-        SetSysFirmwareVersion fw;
-        rc = setsysGetFirmwareVersion(&fw);
-        if (R_SUCCEEDED(rc))
-            hosversionSet(MAKEHOSVERSION(fw.major, fw.minor, fw.micro));
-        setsysExit();
+    if (hosversionGet() == 0) {
+        rc = setsysInitialize();
+        if (R_SUCCEEDED(rc)) {
+            SetSysFirmwareVersion fw;
+            rc = setsysGetFirmwareVersion(&fw);
+            if (R_SUCCEEDED(rc))
+                hosversionSet(MAKEHOSVERSION(fw.major, fw.minor, fw.micro));
+            setsysExit();
+        }
     }
 
     rc = appletInitialize();
