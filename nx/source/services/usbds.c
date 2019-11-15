@@ -1,7 +1,6 @@
 #include "service_guard.h"
 #include <string.h>
 #include "arm/cache.h"
-#include "services/usb.h"
 #include "services/usbds.h"
 #include "runtime/hosversion.h"
 #include "runtime/util/utf.h"
@@ -47,24 +46,17 @@ Result _usbDsInitialize(void) {
     if (R_SUCCEEDED(rc) && hosversionAtLeast(5,0,0))
         usbDsClearDeviceData();
 
-    if (R_FAILED(rc)) {
-        eventClose(&g_usbDsStateChangeEvent);
-
-        serviceClose(&g_usbDsSrv);
-    }
-
     return rc;
 }
 
 void _usbDsCleanup(void) {
-    if (hosversionAtLeast(5,0,0)) {
+    if (hosversionAtLeast(5,0,0) && serviceIsActive(&g_usbDsSrv)) {
         usbDsDisable();
     }
 
     _usbDsFreeTables();
 
     eventClose(&g_usbDsStateChangeEvent);
-
     serviceClose(&g_usbDsSrv);
 }
 
@@ -112,6 +104,7 @@ static void _usbDsFreeEndpoint(UsbDsEndpoint* endpoint) {
 
     eventClose(&endpoint->CompletionEvent);
 
+    serviceAssumeDomain(&endpoint->s);
     serviceClose(&endpoint->s);
 
     endpoint->initialized = false;
@@ -133,6 +126,7 @@ static void _usbDsFreeInterface(UsbDsInterface* interface) {
     eventClose(&interface->CtrlInCompletionEvent);
     eventClose(&interface->SetupEvent);
 
+    serviceAssumeDomain(&interface->s);
     serviceClose(&interface->s);
 
     interface->initialized = false;
@@ -328,6 +322,7 @@ Result usbDsGetDsInterface(UsbDsInterface** interface, struct usb_interface_desc
     
     UsbDsInterface* ptr = _usbDsTryAllocateInterface(send_desc.bInterfaceNumber);
     if(ptr == NULL) {
+        serviceAssumeDomain(&srv);
         serviceClose(&srv);
         return MAKERESULT(Module_Libnx, LibnxError_OutOfMemory);
     }
@@ -379,6 +374,7 @@ Result usbDsRegisterInterface(UsbDsInterface** interface) {
     
     UsbDsInterface* ptr = _usbDsTryAllocateInterface(intf_num);
     if (ptr == NULL) {
+        serviceAssumeDomain(&srv);
         serviceClose(&srv);
         return MAKERESULT(Module_Libnx, LibnxError_OutOfMemory);
     }

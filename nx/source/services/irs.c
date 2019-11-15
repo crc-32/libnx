@@ -5,7 +5,6 @@
 #include "kernel/tmem.h"
 #include "services/applet.h"
 #include "services/irs.h"
-#include "services/hid.h"
 
 typedef struct {
     bool initialized;
@@ -53,13 +52,15 @@ void _irsCleanup(void) {
     size_t entrycount = sizeof(g_irsCameras)/sizeof(IrsCameraEntry);
     IrsCameraEntry *entry;
 
-    for(size_t i=0; i<entrycount; i++) {
-        entry = &g_irsCameras[i];
-        if (!entry->initialized) continue;
-        irsStopImageProcessor(entry->IrCameraHandle);
-    }
+    if (serviceIsActive(&g_irsSrv)) {
+        for(size_t i=0; i<entrycount; i++) {
+            entry = &g_irsCameras[i];
+            if (!entry->initialized) continue;
+            irsStopImageProcessor(entry->IrCameraHandle);
+        }
 
-    irsActivateIrsensor(0);
+        irsActivateIrsensor(0);
+    }
 
     serviceClose(&g_irsSrv);
     shmemClose(&g_irsSharedmem);
@@ -189,10 +190,11 @@ Result irsStopImageProcessor(u32 IrCameraHandle) {
 static Result _irsRunImageTransferProcessor(u32 IrCameraHandle, u64 AppletResourceUserId, IrsPackedImageTransferProcessorConfig *config, TransferMemory *tmem) {
     const struct {
         u32 IrCameraHandle;
+        u32 pad;
         u64 AppletResourceUserId;
         IrsPackedImageTransferProcessorConfig config;
         u64 TransferMemory_size;
-    } in = { IrCameraHandle, AppletResourceUserId, *config, tmem->size };
+    } in = { IrCameraHandle, 0, AppletResourceUserId, *config, tmem->size };
 
     return serviceDispatchIn(&g_irsSrv, 308, in,
         .in_send_pid = true,

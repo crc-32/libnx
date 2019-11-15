@@ -10,6 +10,7 @@
 #include "../types.h"
 #include "../kernel/event.h"
 #include "../sf/service.h"
+#include "../services/ncm_types.h"
 
 /// LaunchFlag
 typedef enum {
@@ -56,47 +57,41 @@ typedef enum {
     PmBootMode_SafeMode    = 2,    ///< SafeMode
 } PmBootMode;
 
+/// Initialize pm:dmnt.
 Result pmdmntInitialize(void);
+
+/// Exit pm:dmnt.
 void pmdmntExit(void);
 
+/// Gets the Service object for the actual pm:dmnt service session.
 Service* pmdmntGetServiceSession(void);
 
+/// Initialize pm:info.
 Result pminfoInitialize(void);
+
+/// Exit pm:info.
 void pminfoExit(void);
 
+/// Gets the Service object for the actual pm:info service session.
 Service* pminfoGetServiceSession(void);
 
+/// Initialize pm:shell.
 Result pmshellInitialize(void);
+
+/// Exit pm:shell.
 void pmshellExit(void);
 
+/// Gets the Service object for the actual pm:shell service session.
 Service* pmshellGetServiceSession(void);
 
+/// Initialize pm:bm.
 Result pmbmInitialize();
+
+/// Exit pm:bm.
 void pmbmExit();
 
+/// Gets the Service object for the actual pm:bm service session.
 Service* pmbmGetServiceSession(void);
-
-Result pmdmntGetDebugProcesses(u32* out_count, u64* out_pids, size_t max_pids);
-Result pmdmntStartProcess(u64 pid);
-Result pmdmntGetTitlePid(u64* pid_out, u64 title_id);
-Result pmdmntEnableDebugForTitleId(Event* out, u64 title_id);
-Result pmdmntGetApplicationPid(u64* pid_out);
-Result pmdmntEnableDebugForApplication(Event* out);
-Result pmdmntDisableDebug(u32 which);
-
-Result pminfoGetTitleId(u64* title_id_out, u64 pid);
-
-Result pmshellLaunchProcess(u32 launch_flags, u64 titleID, u64 storageID, u64 *pid);
-Result pmshellTerminateProcessByProcessId(u64 processID);
-Result pmshellTerminateProcessByTitleId(u64 titleID);
-Result pmshellGetProcessEvent(Event* out); // Autoclear for pmshellProcessEvent is always true.
-Result pmshellGetProcessEventInfo(PmProcessEventInfo* out);
-Result pmshellFinalizeDeadProcess(u64 pid);
-Result pmshellClearProcessExceptionOccurred(u64 pid);
-Result pmshellNotifyBootFinished(void);
-Result pmshellGetApplicationPid(u64* pid_out);
-Result pmshellBoostSystemMemoryResourceLimit(u64 boost_size);
-Result pmshellBoostSystemThreadResourceLimit(void);
 
 /**
  * @brief Gets the \ref PmBootMode.
@@ -108,3 +103,25 @@ Result pmbmGetBootMode(PmBootMode *out);
  * @brief Sets the \ref PmBootMode to ::PmBootMode_Maintenance.
  */
 Result pmbmSetMaintenanceBoot(void);
+
+Result pmdmntGetJitDebugProcessIdList(u32* out_count, u64* out_pids, size_t max_pids);
+Result pmdmntStartProcess(u64 pid);
+Result pmdmntGetProcessId(u64* pid_out, u64 program_id);
+Result pmdmntHookToCreateProcess(Event* out, u64 program_id);
+Result pmdmntGetApplicationProcessId(u64* pid_out);
+Result pmdmntHookToCreateApplicationProcess(Event* out);
+Result pmdmntClearHook(u32 which);
+
+Result pminfoGetProgramId(u64* program_id_out, u64 pid);
+
+Result pmshellLaunchProgram(u32 launch_flags, const NcmProgramLocation *location, u64 *pid);
+Result pmshellTerminateProcess(u64 processID);
+Result pmshellTerminateProgram(u64 program_id);
+Result pmshellGetProcessEventHandle(Event* out); // Autoclear for pmshellProcessEvent is always true.
+Result pmshellGetProcessEventInfo(PmProcessEventInfo* out);
+Result pmshellCleanupProcess(u64 pid);
+Result pmshellClearJitDebugOccured(u64 pid);
+Result pmshellNotifyBootFinished(void);
+Result pmshellGetApplicationProcessIdForShell(u64* pid_out);
+Result pmshellBoostSystemMemoryResourceLimit(u64 boost_size);
+Result pmshellBoostSystemThreadResourceLimit(void);

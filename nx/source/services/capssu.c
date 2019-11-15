@@ -3,9 +3,7 @@
 #include "service_guard.h"
 #include "runtime/hosversion.h"
 #include "services/applet.h"
-#include "services/caps.h"
 #include "services/capssu.h"
-#include "services/acc.h"
 
 static Service g_capssuSrv;
 
@@ -58,8 +56,9 @@ static Result _capssuSaveScreenShotEx0(const void* buffer, size_t size, const Ca
     const struct {
         CapsScreenShotAttribute attr;
         u32 reportoption;
+        u32 pad;
         u64 AppletResourceUserId;
-    } in = { *attr, reportoption, AppletResourceUserId };
+    } in = { *attr, reportoption, 0, AppletResourceUserId };
 
     return serviceDispatchInOut(&g_capssuSrv, 203, in, *out,
         .buffer_attrs = { SfBufferAttr_HipcMapTransferAllowsNonSecure | SfBufferAttr_HipcMapAlias | SfBufferAttr_In },
@@ -75,8 +74,9 @@ static Result _capssuSaveScreenShotEx(u32 cmd_id, bool pid, const void* argbuf, 
     const struct {
         CapsScreenShotAttribute attr;
         u32 reportoption;
+        u32 pad;
         u64 AppletResourceUserId;
-    } in = { *attr, reportoption, AppletResourceUserId };
+    } in = { *attr, reportoption, 0, AppletResourceUserId };
 
     return serviceDispatchInOut(&g_capssuSrv, cmd_id, in, *out,
         .buffer_attrs = {
@@ -119,11 +119,11 @@ Result capssuSaveScreenShotWithUserData(const void* buffer, size_t size, AlbumRe
     return capssuSaveScreenShotEx1(buffer, size, &attr, reportoption, &appdata, out);
 }
 
-Result capssuSaveScreenShotWithUserIds(const void* buffer, size_t size, AlbumReportOption reportoption, AlbumImageOrientation orientation, const AccountUid* userIDs, size_t userID_count, CapsApplicationAlbumEntry *out) {
+Result capssuSaveScreenShotWithUserIds(const void* buffer, size_t size, AlbumReportOption reportoption, AlbumImageOrientation orientation, const AccountUid* uids, size_t uid_count, CapsApplicationAlbumEntry *out) {
     CapsScreenShotAttribute attr;
     CapsUserIdList list;
 
-    if (userID_count > ACC_USER_LIST_SIZE)
+    if (uid_count > ACC_USER_LIST_SIZE)
         return MAKERESULT(Module_Libnx, LibnxError_BadInput);
 
     memset(&attr, 0, sizeof(attr));
@@ -131,8 +131,8 @@ Result capssuSaveScreenShotWithUserIds(const void* buffer, size_t size, AlbumRep
     attr.unk_xc = 1;
 
     memset(&list, 0, sizeof(list));
-    if (userIDs && userID_count) memcpy(list.userIDs, userIDs, userID_count*sizeof(AccountUid));
-    list.count = userID_count;
+    if (uids && uid_count) memcpy(list.uids, uids, uid_count*sizeof(AccountUid));
+    list.count = uid_count;
 
     return capssuSaveScreenShotEx2(buffer, size, &attr, reportoption, &list, out);
 }

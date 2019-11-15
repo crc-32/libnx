@@ -10,6 +10,7 @@
 
 #include "../../types.h"
 #include "../../services/fs.h"
+#include "../../services/ncm_types.h"
 
 /// RomFS header.
 typedef struct
@@ -53,12 +54,11 @@ typedef struct
 /**
  * @brief Mounts the Application's RomFS.
  * @param name Device mount name.
+ * @remark This function is intended to be used to access one's own RomFS.
+ *         If the application is running as NRO, it mounts the embedded RomFS section inside the NRO.
+ *         If on the other hand it's an NSO, it behaves identically to \ref romfsMountFromCurrentProcess.
  */
-Result romfsMount(const char *name);
-static inline Result romfsInit(void)
-{
-    return romfsMount("romfs");
-}
+Result romfsMountSelf(const char *name);
 
 /**
  * @brief Mounts RomFS from an open file.
@@ -67,10 +67,6 @@ static inline Result romfsInit(void)
  * @param name Device mount name.
  */
 Result romfsMountFromFile(FsFile file, u64 offset, const char *name);
-static inline Result romfsInitFromFile(FsFile file, u64 offset)
-{
-    return romfsMountFromFile(file, offset, "romfs");
-}
 
 /**
  * @brief Mounts RomFS from an open storage.
@@ -79,13 +75,9 @@ static inline Result romfsInitFromFile(FsFile file, u64 offset)
  * @param name Device mount name.
  */
 Result romfsMountFromStorage(FsStorage storage, u64 offset, const char *name);
-static inline Result romfsInitFromStorage(FsStorage storage, u64 offset)
-{
-    return romfsMountFromStorage(storage, offset, "romfs");
-}
 
 /**
- * @brief Mounts RomFS using the current process host title RomFS.
+ * @brief Mounts RomFS using the current process host program RomFS.
  * @param name Device mount name.
  */
 Result romfsMountFromCurrentProcess(const char *name);
@@ -99,17 +91,24 @@ Result romfsMountFromCurrentProcess(const char *name);
 Result romfsMountFromFsdev(const char *path, u64 offset, const char *name);
 
 /**
- * @brief Mounts RomFS from a system data archive.
- * @param dataId Title ID of system data archive to mount.
+ * @brief Mounts RomFS from SystemData.
+ * @param dataId SystemDataId to mount.
  * @param storageId Storage ID to mount from.
  * @param name Device mount name.
  */
-Result romfsMountFromDataArchive(u64 dataId, FsStorageId storageId, const char *name);
+Result romfsMountFromDataArchive(u64 dataId, NcmStorageId storageId, const char *name);
 
 /// Unmounts the RomFS device.
 Result romfsUnmount(const char *name);
+
+/// Wrapper for \ref romfsMountSelf with the default "romfs" device name.
+static inline Result romfsInit(void)
+{
+    return romfsMountSelf("romfs");
+}
+
+/// Wrapper for \ref romfsUnmount with the default "romfs" device name.
 static inline Result romfsExit(void)
 {
     return romfsUnmount("romfs");
 }
-

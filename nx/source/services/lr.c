@@ -2,6 +2,7 @@
 #include <string.h>
 #include "service_guard.h"
 #include "services/lr.h"
+#include "services/fs.h"
 #include "runtime/hosversion.h"
 
 static Service g_lrSrv;
@@ -20,7 +21,7 @@ Service* lrGetServiceSession(void) {
     return &g_lrSrv;
 }
 
-Result lrOpenLocationResolver(FsStorageId storage, LrLocationResolver* out) {
+Result lrOpenLocationResolver(NcmStorageId storage, LrLocationResolver* out) {
     const u8 in = (u8)storage;
     return serviceDispatchIn(&g_lrSrv, 0, in,
         .out_num_objects = 1,
@@ -42,7 +43,7 @@ Result lrOpenRegisteredLocationResolver(LrRegisteredLocationResolver* out) {
 static Result _lrResolvePath(Service* s, u64 tid, char *out, u32 cmd_id) {
     char out_path[FS_MAX_PATH] = {0};
     Result rc = serviceDispatchIn(s, cmd_id, tid,
-        .buffer_attrs = { SfBufferAttr_Out | SfBufferAttr_HipcPointer },
+        .buffer_attrs = { SfBufferAttr_Out | SfBufferAttr_HipcPointer | SfBufferAttr_FixedSize },
         .buffers = { { out_path, FS_MAX_PATH } },
     );
 

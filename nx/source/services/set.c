@@ -75,7 +75,7 @@ static Result _setCmdNoInOutU8(Service* srv, u8 *out, u32 cmd_id) {
 static Result _setCmdNoInOutBool(Service* srv, bool *out, u32 cmd_id) {
     u8 tmp=0;
     Result rc = _setCmdNoInOutU8(srv, &tmp, cmd_id);
-    if (R_SUCCEEDED(rc) && out) *out = tmp!=0;
+    if (R_SUCCEEDED(rc) && out) *out = tmp & 1;
     return rc;
 }
 
@@ -489,4 +489,73 @@ Result setsysSetRequiresRunRepairTimeReviser(bool flag) {
         return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
 
     return _setCmdInBoolNoOut(&g_setsysSrv, flag, 142);
+}
+
+Result setsysGetPctlReadyFlag(bool *out) {
+    if (hosversionBefore(6,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return _setCmdNoInOutBool(&g_setsysSrv, out, 156);
+}
+
+Result setsysSetPctlReadyFlag(bool flag) {
+    if (hosversionBefore(6,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return _setCmdInBoolNoOut(&g_setsysSrv, flag, 157);
+}
+
+Result setsysGetHomeMenuScheme(SetSysHomeMenuScheme *out) {
+    if (hosversionBefore(9,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatchOut(&g_setsysSrv, 174, *out);
+}
+
+Result setsysGetPlatformRegion(SetSysPlatformRegion *out) {
+    if (hosversionBefore(9,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    u32 tmp=0;
+    Result rc = _setCmdNoInOutU32(&g_setsysSrv, &tmp, 183);
+    if (R_SUCCEEDED(rc) && out) *out = tmp;
+    return rc;
+}
+
+Result setsysSetPlatformRegion(SetSysPlatformRegion region) {
+    if (hosversionBefore(9,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return _setCmdInU32NoOut(&g_setsysSrv, region, 184);
+}
+
+Result setsysGetHomeMenuSchemeModel(u32 *out) {
+    if (hosversionBefore(9,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return _setCmdNoInOutU32(&g_setsysSrv, out, 185);
+}
+
+Result setsysGetMemoryUsageRateFlag(bool *out) {
+    if (hosversionBefore(9,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return _setCmdNoInOutBool(&g_setsysSrv, out, 186);
+}
+
+Result setsysGetTouchScreenMode(SetSysTouchScreenMode *out) {
+    if (hosversionBefore(9,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    u32 tmp=0;
+    Result rc = _setCmdNoInOutU32(&g_setsysSrv, &tmp, 187);
+    if (R_SUCCEEDED(rc) && out) *out = tmp;
+    return rc;
+}
+
+Result setsysSetTouchScreenMode(SetSysTouchScreenMode mode) {
+    if (hosversionBefore(9,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return _setCmdInU32NoOut(&g_setsysSrv, mode, 188);
 }

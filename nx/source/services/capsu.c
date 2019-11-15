@@ -4,9 +4,7 @@
 #include "service_guard.h"
 #include "runtime/hosversion.h"
 #include "services/applet.h"
-#include "services/caps.h"
 #include "services/capsu.h"
-#include "services/acc.h"
 
 static Service g_capsuSrv;
 static Service g_capsuAccessor;
@@ -68,10 +66,11 @@ static Result _capsuGetAlbumFileList0AafeAruidDeprecated(void* entries, size_t e
 
     const struct {
         u8 type;
+        u8 pad[7];
         u64 start_timestamp;
         u64 end_timestamp;
         u64 AppletResourceUserId;
-    } in = { type, start_timestamp, end_timestamp, AppletResourceUserId };
+    } in = { type, {0}, start_timestamp, end_timestamp, AppletResourceUserId };
 
     u64 total_out=0;
     Result rc = serviceDispatchInOut(&g_capsuSrv, 102, in, total_out,
@@ -89,9 +88,10 @@ static Result _capsuDeleteAlbumFileByAruid(u32 cmd_id, u8 type, const CapsApplic
 
     const struct {
         u8 type;
+        u8 pad[7];
         CapsApplicationAlbumFileEntry entry;
         u64 AppletResourceUserId;
-    } in = { type, *entry, AppletResourceUserId };
+    } in = { type, {0}, *entry, AppletResourceUserId };
 
     return serviceDispatchIn(&g_capsuSrv, 103, in,
         .in_send_pid = true,
@@ -118,9 +118,10 @@ static Result _capsuPrecheckToCreateContentsByAruid(u8 type, u64 unk) {
 
     const struct {
         u8 type;
+        u8 pad[7];
         u64 unk;
         u64 AppletResourceUserId;
-    } in = { type, unk, AppletResourceUserId };
+    } in = { type, {0}, unk, AppletResourceUserId };
 
     return serviceDispatchIn(&g_capsuSrv, 130, in,
         .in_send_pid = true,
@@ -158,10 +159,12 @@ static Result _capsuGetAlbumFileListAaeAruid(u32 cmd_id, void* entries, size_t e
 
     const struct {
         u8 type;
+        u8 pad;
         CapsAlbumFileDateTime start_datetime;
         CapsAlbumFileDateTime end_datetime;
+        u8 pad2[6];
         u64 AppletResourceUserId;
-    } in = { type, *start_datetime, *end_datetime, AppletResourceUserId };
+    } in = { type, 0, *start_datetime, *end_datetime, {0}, AppletResourceUserId };
 
     u64 total_out=0;
     Result rc = serviceDispatchInOut(&g_capsuSrv, cmd_id, in, total_out,
@@ -173,17 +176,19 @@ static Result _capsuGetAlbumFileListAaeAruid(u32 cmd_id, void* entries, size_t e
     return rc;
 }
 
-static Result _capsuGetAlbumFileListAaeUidAruid(u32 cmd_id, void* entries, size_t entrysize, s32 count, u8 type, const CapsAlbumFileDateTime *start_datetime, const CapsAlbumFileDateTime *end_datetime, AccountUid *userID, s32 *total_entries) {
+static Result _capsuGetAlbumFileListAaeUidAruid(u32 cmd_id, void* entries, size_t entrysize, s32 count, u8 type, const CapsAlbumFileDateTime *start_datetime, const CapsAlbumFileDateTime *end_datetime, AccountUid uid, s32 *total_entries) {
     u64 AppletResourceUserId = 0;
     appletGetAppletResourceUserId(&AppletResourceUserId);
 
     const struct {
         u8 type;
+        u8 pad;
         CapsAlbumFileDateTime start_datetime;
         CapsAlbumFileDateTime end_datetime;
-        AccountUid userID;
+        u8 pad2[6];
+        AccountUid uid;
         u64 AppletResourceUserId;
-    } in = { type, *start_datetime, *end_datetime, *userID, AppletResourceUserId };
+    } in = { type, 0, *start_datetime, *end_datetime, {0}, uid, AppletResourceUserId };
 
     u64 total_out=0;
     Result rc = serviceDispatchInOut(&g_capsuSrv, cmd_id, in, total_out,
@@ -264,14 +269,14 @@ Result capsuGetAlbumFileListDeprecated1(CapsApplicationAlbumFileEntry *entries, 
     return _capsuGetAlbumFileListAaeAruid(140, entries, sizeof(CapsApplicationAlbumFileEntry), count, type, start_datetime ? start_datetime : &default_start, end_datetime ? end_datetime : &default_end, total_entries);
 }
 
-Result capsuGetAlbumFileListDeprecated2(CapsApplicationAlbumFileEntry *entries, s32 count, CapsContentType type, const CapsAlbumFileDateTime *start_datetime, const CapsAlbumFileDateTime *end_datetime, AccountUid *userID, s32 *total_entries) {
+Result capsuGetAlbumFileListDeprecated2(CapsApplicationAlbumFileEntry *entries, s32 count, CapsContentType type, const CapsAlbumFileDateTime *start_datetime, const CapsAlbumFileDateTime *end_datetime, AccountUid uid, s32 *total_entries) {
     if (hosversionBefore(6,0,0))
         return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
 
     CapsAlbumFileDateTime default_start = capsGetDefaultStartDateTime();
     CapsAlbumFileDateTime default_end = capsGetDefaultEndDateTime();
 
-    return _capsuGetAlbumFileListAaeUidAruid(141, entries, sizeof(CapsApplicationAlbumFileEntry), count, type, start_datetime ? start_datetime : &default_start, end_datetime ? end_datetime : &default_end, userID, total_entries);
+    return _capsuGetAlbumFileListAaeUidAruid(141, entries, sizeof(CapsApplicationAlbumFileEntry), count, type, start_datetime ? start_datetime : &default_start, end_datetime ? end_datetime : &default_end, uid, total_entries);
 }
 
 Result capsuGetAlbumFileList3(CapsApplicationAlbumEntry *entries, s32 count, CapsContentType type, const CapsAlbumFileDateTime *start_datetime, const CapsAlbumFileDateTime *end_datetime, s32 *total_entries) {
@@ -284,14 +289,14 @@ Result capsuGetAlbumFileList3(CapsApplicationAlbumEntry *entries, s32 count, Cap
     return _capsuGetAlbumFileListAaeAruid(142, entries, sizeof(CapsApplicationAlbumEntry), count, type, start_datetime ? start_datetime : &default_start, end_datetime ? end_datetime : &default_end, total_entries);
 }
 
-Result capsuGetAlbumFileList4(CapsApplicationAlbumEntry *entries, s32 count, CapsContentType type, const CapsAlbumFileDateTime *start_datetime, const CapsAlbumFileDateTime *end_datetime, AccountUid *userID, s32 *total_entries) {
+Result capsuGetAlbumFileList4(CapsApplicationAlbumEntry *entries, s32 count, CapsContentType type, const CapsAlbumFileDateTime *start_datetime, const CapsAlbumFileDateTime *end_datetime, AccountUid uid, s32 *total_entries) {
     if (hosversionBefore(7,0,0))
         return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
 
     CapsAlbumFileDateTime default_start = capsGetDefaultStartDateTime();
     CapsAlbumFileDateTime default_end = capsGetDefaultEndDateTime();
 
-    return _capsuGetAlbumFileListAaeUidAruid(143, entries, sizeof(CapsApplicationAlbumEntry), count, type, start_datetime ? start_datetime : &default_start, end_datetime ? end_datetime : &default_end, userID, total_entries);
+    return _capsuGetAlbumFileListAaeUidAruid(143, entries, sizeof(CapsApplicationAlbumEntry), count, type, start_datetime ? start_datetime : &default_start, end_datetime ? end_datetime : &default_end, uid, total_entries);
 }
 
 Result capsuDeleteAlbumFile(CapsContentType type, const CapsApplicationAlbumFileEntry *entry) {

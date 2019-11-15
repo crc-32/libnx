@@ -73,7 +73,7 @@ void envSetup(void* ctx, Handle main_thread, LoaderReturnFn saved_lr)
             break;
 
         case EntryType_OverrideService:
-            smAddOverrideHandle(ent->Value[0], ent->Value[1]);
+            smAddOverrideHandle(smServiceNameFromU64(ent->Value[0]), ent->Value[1]);
             break;
 
         case EntryType_Argv:
@@ -145,7 +145,7 @@ Handle envGetMainThreadHandle(void) {
         return g_mainThreadHandle;
     }
 
-    fatalSimple(MAKERESULT(Module_Libnx, LibnxError_HandleTooEarly));
+    fatalThrow(MAKERESULT(Module_Libnx, LibnxError_HandleTooEarly));
 }
 
 bool envIsNso(void) {

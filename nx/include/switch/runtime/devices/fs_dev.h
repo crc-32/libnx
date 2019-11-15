@@ -27,8 +27,14 @@ NX_CONSTEXPR FsDirectoryEntry* fsdevDirGetEntries(fsdev_dir_t *dir)
   return (FsDirectoryEntry*)(void*)(dir+1);
 }
 
-/// Initializes and mounts the sdmc device if accessible. Also initializes current working directory to point to the folder containing the path to the executable (argv[0]), if it is provided by the environment.
+/// Initializes and mounts the sdmc device if accessible.
 Result fsdevMountSdmc(void);
+
+/// Mounts the specified save data.
+Result fsdevMountSaveData(const char *name, u64 program_id, AccountUid uid);
+
+/// Mounts the specified system save data.
+Result fsdevMountSystemSaveData(const char *name, FsSaveDataSpaceId saveDataSpaceId, u64 saveID, AccountUid uid);
 
 /// Mounts the input fs with the specified device name. fsdev will handle closing the fs when required, including when fsdevMountDevice() fails.
 /// Returns -1 when any errors occur.
@@ -43,9 +49,6 @@ Result fsdevCommitDevice(const char *name);
 
 /// Returns the FsFileSystem for the specified device. Returns NULL when the specified device isn't found.
 FsFileSystem* fsdevGetDeviceFileSystem(const char *name);
-
-/// Returns the FsFileSystem for the default device (SD card), if mounted. Used internally by romfs_dev.
-FsFileSystem* fsdevGetDefaultFileSystem(void);
 
 /// Writes the FS-path to outpath (which has buffer size FS_MAX_PATH), for the input path (as used in stdio). The FsFileSystem is also written to device when not NULL.
 int fsdevTranslatePath(const char *path, FsFileSystem** device, char *outpath);

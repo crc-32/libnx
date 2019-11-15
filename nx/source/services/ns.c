@@ -3,10 +3,7 @@
 #include "service_guard.h"
 #include "runtime/hosversion.h"
 #include "services/ns.h"
-#include "services/fs.h"
-#include "services/ncm.h"
 #include "services/async.h"
-#include "kernel/tmem.h"
 
 static Service g_nsAppManSrv, g_nsGetterSrv;
 static Service g_nsvmSrv;
@@ -19,8 +16,7 @@ static Result _nsGetSession(Service* srv, Service* srv_out, u32 cmd_id);
 
 NX_GENERATE_SERVICE_GUARD(ns);
 
-Result _nsInitialize(void)
-{
+Result _nsInitialize(void) {
     Result rc=0;
 
     if(hosversionBefore(3,0,0))
@@ -31,13 +27,10 @@ Result _nsInitialize(void)
 
     rc = _nsGetSession(&g_nsGetterSrv, &g_nsAppManSrv, 7996);
 
-    if (R_FAILED(rc)) serviceClose(&g_nsGetterSrv);
-
     return rc;
 }
 
-void _nsCleanup(void)
-{
+void _nsCleanup(void) {
     serviceClose(&g_nsAppManSrv);
     if(hosversionBefore(3,0,0)) return;
 
@@ -108,7 +101,7 @@ static Result _nsCmdNoInOutU8(Service* srv, u8 *out, u32 cmd_id) {
 static Result _nsCmdNoInOutBool(Service* srv, bool *out, u32 cmd_id) {
     u8 tmpout=0;
     Result rc = _nsCmdNoInOutU8(srv, &tmpout, cmd_id);
-    if (R_SUCCEEDED(rc) && out) *out = tmpout!=0;
+    if (R_SUCCEEDED(rc) && out) *out = tmpout & 1;
     return rc;
 }
 
@@ -120,11 +113,11 @@ static Result _nsCmdNoInOutSystemUpdateProgress(Service* srv, NsSystemUpdateProg
     return serviceDispatchOut(srv, cmd_id, *out);
 }
 
-static Result _nsCmdRequestSendReceiveSystemUpdate(Service* srv, AsyncResult *a, u32 inval0, u16 inval1, NsSystemDeliveryInfo *info, u32 cmd_id) {
+static Result _nsCmdRequestSendReceiveSystemUpdate(Service* srv, AsyncResult *a, u32 addr, u16 port, NsSystemDeliveryInfo *info, u32 cmd_id) {
     const struct {
-        u16 inval0;
-        u32 inval1;
-    } in = { inval0, inval1 };
+        u16 port;
+        u32 addr;
+    } in = { port, addr };
 
     memset(a, 0, sizeof(*a));
     Handle event = INVALID_HANDLE;
@@ -182,11 +175,11 @@ Result nsListApplicationRecord(NsApplicationRecord* records, s32 count, s32 entr
     );
 }
 
-Result nsListApplicationContentMetaStatus(u64 titleID, s32 index, NsApplicationContentMetaStatus* list, s32 count, s32* out_entrycount) {
+Result nsListApplicationContentMetaStatus(u64 application_id, s32 index, NsApplicationContentMetaStatus* list, s32 count, s32* out_entrycount) {
     const struct {
         s32 index;
-        u64 titleID;
-    } in = { index, titleID };
+        u64 application_id;
+    } in = { index, application_id };
 
     return serviceDispatchInOut(&g_nsAppManSrv, 601, in, *out_entrycount,
         .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
@@ -194,11 +187,11 @@ Result nsListApplicationContentMetaStatus(u64 titleID, s32 index, NsApplicationC
     );
 }
 
-Result nsGetApplicationControlData(NsApplicationControlSource source, u64 titleID, NsApplicationControlData* buffer, size_t size, u64* actual_size) {
+Result nsGetApplicationControlData(NsApplicationControlSource source, u64 application_id, NsApplicationControlData* buffer, size_t size, u64* actual_size) {
     const struct {
         u8 source;
-        u64 titleID;
-    } in = { source, titleID };
+        u64 application_id;
+    } in = { source, application_id };
 
     u32 tmp=0;
 
@@ -210,28 +203,297 @@ Result nsGetApplicationControlData(NsApplicationControlSource source, u64 titleI
     return rc;
 }
 
-Result nsGetTotalSpaceSize(FsStorageId storage_id, u64 *size) {
+Result nsGetTotalSpaceSize(NcmStorageId storage_id, u64 *size) {
     return _nsCmdInU64OutU64(&g_nsAppManSrv, storage_id, size, 47);
 }
 
-Result nsGetFreeSpaceSize(FsStorageId storage_id, u64 *size) {
+Result nsGetFreeSpaceSize(NcmStorageId storage_id, u64 *size) {
     return _nsCmdInU64OutU64(&g_nsAppManSrv, storage_id, size, 48);
+}
+
+Result nsGetSystemDeliveryInfo(NsSystemDeliveryInfo *info) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatch(&g_nsAppManSrv, 2000,
+        .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
+        .buffers = { { info, sizeof(*info) } },
+    );
+}
+
+Result nsSelectLatestSystemDeliveryInfo(const NsSystemDeliveryInfo *sys_list, s32 sys_count, const NsSystemDeliveryInfo *base_info, const NsApplicationDeliveryInfo *app_list, s32 app_count, s32 *index) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatchOut(&g_nsAppManSrv, 2001, *index,
+        .buffer_attrs = {
+            SfBufferAttr_HipcMapAlias | SfBufferAttr_In,
+            SfBufferAttr_HipcMapAlias | SfBufferAttr_In,
+            SfBufferAttr_HipcMapAlias | SfBufferAttr_In,
+        },
+        .buffers = {
+            { base_info, sizeof(*base_info) },
+            { sys_list, sys_count*sizeof(NsSystemDeliveryInfo) },
+            { app_list, app_count*sizeof(NsApplicationDeliveryInfo) },
+        },
+    );
+}
+
+Result nsVerifyDeliveryProtocolVersion(const NsSystemDeliveryInfo *info) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatch(&g_nsAppManSrv, 2002,
+        .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_In },
+        .buffers = { { info, sizeof(*info) } },
+    );
+}
+
+Result nsGetApplicationDeliveryInfo(NsApplicationDeliveryInfo *info, s32 count, u64 application_id, u32 attr, s32 *total_out) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    const struct {
+        u32 attr;
+        u32 pad;
+        u64 application_id;
+    } in = { attr, 0, application_id };
+
+    return serviceDispatchInOut(&g_nsAppManSrv, 2003, in, *total_out,
+        .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
+        .buffers = { { info, count*sizeof(NsApplicationDeliveryInfo) } },
+    );
+}
+
+Result nsHasAllContentsToDeliver(const NsApplicationDeliveryInfo *info, s32 count, bool *out) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    u8 tmp=0;
+    Result rc = serviceDispatchOut(&g_nsAppManSrv, 2004, tmp,
+        .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_In },
+        .buffers = { { info, count*sizeof(NsApplicationDeliveryInfo) } },
+    );
+    if (R_SUCCEEDED(rc) && out) *out = tmp & 1;
+    return rc;
+}
+
+Result nsCompareApplicationDeliveryInfo(const NsApplicationDeliveryInfo *info0, s32 count0, const NsApplicationDeliveryInfo *info1, s32 count1, s32 *out) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatchOut(&g_nsAppManSrv, 2005, out,
+        .buffer_attrs = {
+            SfBufferAttr_HipcMapAlias | SfBufferAttr_In,
+            SfBufferAttr_HipcMapAlias | SfBufferAttr_In,
+        },
+        .buffers = {
+            { info0, count0*sizeof(NsApplicationDeliveryInfo) },
+            { info1, count1*sizeof(NsApplicationDeliveryInfo) },
+        },
+    );
+}
+
+Result nsCanDeliverApplication(const NsApplicationDeliveryInfo *info0, s32 count0, const NsApplicationDeliveryInfo *info1, s32 count1, bool *out) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    u8 tmp=0;
+    Result rc = serviceDispatchOut(&g_nsAppManSrv, 2006, tmp,
+        .buffer_attrs = {
+            SfBufferAttr_HipcMapAlias | SfBufferAttr_In,
+            SfBufferAttr_HipcMapAlias | SfBufferAttr_In,
+        },
+        .buffers = {
+            { info0, count0*sizeof(NsApplicationDeliveryInfo) },
+            { info1, count1*sizeof(NsApplicationDeliveryInfo) },
+        },
+    );
+    if (R_SUCCEEDED(rc) && out) *out = tmp & 1;
+    return rc;
+}
+
+Result nsListContentMetaKeyToDeliverApplication(NcmContentMetaKey *meta, s32 meta_count, s32 meta_index, const NsApplicationDeliveryInfo *info, s32 info_count, s32 *total_out) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatchInOut(&g_nsAppManSrv, 2007, meta_index, *total_out,
+        .buffer_attrs = {
+            SfBufferAttr_HipcMapAlias | SfBufferAttr_Out,
+            SfBufferAttr_HipcMapAlias | SfBufferAttr_In,
+        },
+        .buffers = {
+            { meta, meta_count*sizeof(NcmContentMetaKey) },
+            { info, info_count*sizeof(NsApplicationDeliveryInfo) },
+        },
+    );
+}
+
+Result nsNeedsSystemUpdateToDeliverApplication(const NsApplicationDeliveryInfo *info, s32 count, const NsSystemDeliveryInfo *sys_info, bool *out) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    u8 tmp=0;
+    Result rc = serviceDispatchOut(&g_nsAppManSrv, 2008, tmp,
+        .buffer_attrs = {
+            SfBufferAttr_HipcMapAlias | SfBufferAttr_In,
+            SfBufferAttr_HipcMapAlias | SfBufferAttr_In,
+        },
+        .buffers = {
+            { sys_info, sizeof(*sys_info) },
+            { info, count*sizeof(NsApplicationDeliveryInfo) },
+        },
+    );
+    if (R_SUCCEEDED(rc) && out) *out = tmp & 1;
+    return rc;
+}
+
+Result nsEstimateRequiredSize(const NcmContentMetaKey *meta, s32 count, s64 *out) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatchOut(&g_nsAppManSrv, 2009, *out,
+        .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_In },
+        .buffers = { { meta, count*sizeof(NcmContentMetaKey) } },
+    );
+}
+
+Result nsRequestReceiveApplication(AsyncResult *a, u32 addr, u16 port, u64 application_id, const NcmContentMetaKey *meta, s32 count, NcmStorageId storage_id) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    const struct {
+        u8 storage_id;
+        u8 pad;
+        u16 port;
+        u16 pad2;
+        u32 addr;
+        u64 application_id;
+    } in = { storage_id, 0, port, 0, addr, application_id };
+
+    memset(a, 0, sizeof(*a));
+    Handle event = INVALID_HANDLE;
+    Result rc = serviceDispatchIn(&g_nsAppManSrv, 2010, in,
+        .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_In },
+        .buffers = { { meta, count*sizeof(NcmContentMetaKey) } },
+        .out_num_objects = 1,
+        .out_objects = &a->s,
+        .out_handle_attrs = { SfOutHandleAttr_HipcCopy },
+        .out_handles = &event,
+    );
+
+    if (R_SUCCEEDED(rc))
+        eventLoadRemote(&a->event, event, false);
+
+    return rc;
+}
+
+Result nsCommitReceiveApplication(u64 application_id) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return _nsCmdInU64(&g_nsAppManSrv, application_id, 2011);
+}
+
+Result nsGetReceiveApplicationProgress(u64 application_id, NsReceiveApplicationProgress *out) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatchInOut(&g_nsAppManSrv, 2012, application_id, *out);
+}
+
+Result nsRequestSendApplication(AsyncResult *a, u32 addr, u16 port, u64 application_id, const NcmContentMetaKey *meta, s32 count) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    const struct {
+        u16 port;
+        u16 pad2;
+        u32 addr;
+        u64 application_id;
+    } in = { port, 0, addr, application_id };
+
+    memset(a, 0, sizeof(*a));
+    Handle event = INVALID_HANDLE;
+    Result rc = serviceDispatchIn(&g_nsAppManSrv, 2013, in,
+        .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_In },
+        .buffers = { { meta, count*sizeof(NcmContentMetaKey) } },
+        .out_num_objects = 1,
+        .out_objects = &a->s,
+        .out_handle_attrs = { SfOutHandleAttr_HipcCopy },
+        .out_handles = &event,
+    );
+
+    if (R_SUCCEEDED(rc))
+        eventLoadRemote(&a->event, event, false);
+
+    return rc;
+}
+
+Result nsGetSendApplicationProgress(u64 application_id, NsSendApplicationProgress *out) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatchInOut(&g_nsAppManSrv, 2014, application_id, *out);
+}
+
+Result nsCompareSystemDeliveryInfo(const NsSystemDeliveryInfo *info0, const NsSystemDeliveryInfo *info1, s32 *out) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatchOut(&g_nsAppManSrv, 2015, out,
+        .buffer_attrs = {
+            SfBufferAttr_HipcMapAlias | SfBufferAttr_In,
+            SfBufferAttr_HipcMapAlias | SfBufferAttr_In,
+        },
+        .buffers = {
+            { info0, sizeof(*info0) },
+            { info1, sizeof(*info1) },
+        },
+    );
+}
+
+Result nsListNotCommittedContentMeta(NcmContentMetaKey *meta, s32 count, u64 application_id, s32 unk, s32 *total_out) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    const struct {
+        s32 unk;
+        u32 pad;
+        u64 application_id;
+    } in = { unk, 0, application_id };
+
+    return serviceDispatchInOut(&g_nsAppManSrv, 2016, in, *total_out,
+        .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
+        .buffers = { { meta, count*sizeof(NcmContentMetaKey) } },
+    );
+}
+
+Result nsGetApplicationDeliveryInfoHash(const NsApplicationDeliveryInfo *info, s32 count, u8 *out_hash) {
+    if (hosversionBefore(5,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    u8 tmp[0x20];
+    Result rc = serviceDispatchOut(&g_nsAppManSrv, 2018, tmp,
+        .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_In },
+        .buffers = { { info, count*sizeof(NsApplicationDeliveryInfo) } },
+    );
+    if (R_SUCCEEDED(rc) && out_hash) memcpy(out_hash, tmp, sizeof(tmp));
+    return rc;
 }
 
 // ns:vm
 
 NX_GENERATE_SERVICE_GUARD(nsvm);
 
-Result _nsvmInitialize(void)
-{
+Result _nsvmInitialize(void) {
     if (hosversionBefore(3,0,0))
         return 0;
 
     return smGetService(&g_nsvmSrv, "ns:vm");
 }
 
-void _nsvmCleanup(void)
-{
+void _nsvmCleanup(void) {
     if (hosversionBefore(3,0,0))
         return;
 
@@ -275,8 +537,9 @@ Service* nsdevGetServiceSession(void) {
 Result nsdevLaunchProgram(u64* out_pid, const NsLaunchProperties* properties, u32 flags) {
     const struct {
         u32 flags;
+        u32 pad;
         NsLaunchProperties properties;
-    } in = { flags, *properties};
+    } in = { flags, 0, *properties};
 
     return serviceDispatchInOut(&g_nsdevSrv, 0, in, *out_pid);
 }
@@ -318,22 +581,22 @@ Result nsdevPrepareLaunchProgramFromHost(NsLaunchProperties* out, const char* pa
     );
 }
 
-Result nsdevLaunchApplicationForDevelop(u64* out_pid, u64 app_title_id, u32 flags) {
+Result nsdevLaunchApplicationForDevelop(u64* out_pid, u64 application_id, u32 flags) {
     const struct {
         u32 flags;
-        u64 app_title_id;
-    } in = { .flags = flags, .app_title_id = app_title_id};
+        u64 application_id;
+    } in = { .flags = flags, .application_id = application_id};
 
     return serviceDispatchInOut(&g_nsdevSrv, 8, in, *out_pid);
 }
 
-Result nsdevLaunchApplicationWithStorageIdForDevelop(u64* out_pid, u64 app_title_id, u32 flags, u8 app_storage_id, u8 patch_storage_id) {
+Result nsdevLaunchApplicationWithStorageIdForDevelop(u64* out_pid, u64 application_id, u32 flags, u8 app_storage_id, u8 patch_storage_id) {
     const struct {
         u8 app_storage_id;
         u8 patch_storage_id;
         u32 flags;
-        u64 app_title_id;
-    } in = { .app_storage_id = app_storage_id, .patch_storage_id = patch_storage_id, .flags = flags, .app_title_id = app_title_id};
+        u64 application_id;
+    } in = { .app_storage_id = app_storage_id, .patch_storage_id = patch_storage_id, .flags = flags, .application_id = application_id};
 
     return serviceDispatchInOut(&g_nsdevSrv, 9, in, *out_pid);
 }
@@ -425,11 +688,11 @@ Result nssuDestroySystemUpdateTask(void) {
     return _nsCmdNoIO(&g_nssuSrv, 16);
 }
 
-Result nssuRequestSendSystemUpdate(AsyncResult *a, u32 inval0, u16 inval1, NsSystemDeliveryInfo *info) {
+Result nssuRequestSendSystemUpdate(AsyncResult *a, u32 addr, u16 port, NsSystemDeliveryInfo *info) {
     if (hosversionBefore(4,0,0))
         return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
 
-    return _nsCmdRequestSendReceiveSystemUpdate(&g_nssuSrv, a, inval0, inval1, info, 17);
+    return _nsCmdRequestSendReceiveSystemUpdate(&g_nssuSrv, a, addr, port, info, 17);
 }
 
 Result nssuGetSendSystemUpdateProgress(NsSystemUpdateProgress *out) {
@@ -605,13 +868,13 @@ Result nssuControlHasReceived(NsSystemUpdateControl *c, bool* out) {
     return _nsCmdNoInOutBool(&c->s, out, 15);
 }
 
-Result nssuControlRequestReceiveSystemUpdate(NsSystemUpdateControl *c, AsyncResult *a, u32 inval0, u16 inval1, NsSystemDeliveryInfo *info) {
+Result nssuControlRequestReceiveSystemUpdate(NsSystemUpdateControl *c, AsyncResult *a, u32 addr, u16 port, NsSystemDeliveryInfo *info) {
     if (!serviceIsActive(&c->s))
         return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
     if (hosversionBefore(4,0,0))
         return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
 
-    return _nsCmdRequestSendReceiveSystemUpdate(&c->s, a, inval0, inval1, info, 16);
+    return _nsCmdRequestSendReceiveSystemUpdate(&c->s, a, addr, port, info, 16);
 }
 
 Result nssuControlGetReceiveProgress(NsSystemUpdateControl *c, NsSystemUpdateProgress *out) {

@@ -2,7 +2,6 @@
 #include <malloc.h>
 #include "types.h"
 #include "result.h"
-#include "services/caps.h"
 #include "services/applet.h"
 #include "applets/libapplet.h"
 #include "applets/web.h"
@@ -309,7 +308,7 @@ Result webYouTubeVideoCreate(WebCommonConfig* config, const char* url) {
     return rc;
 }
 
-Result webOfflineCreate(WebCommonConfig* config, WebDocumentKind docKind, u64 titleID, const char* docPath) {
+Result webOfflineCreate(WebCommonConfig* config, WebDocumentKind docKind, u64 id, const char* docPath) {
     Result rc=0;
 
     if (docKind < WebDocumentKind_OfflineHtmlPage || docKind > WebDocumentKind_SystemDataPage)
@@ -341,7 +340,7 @@ Result webOfflineCreate(WebCommonConfig* config, WebDocumentKind docKind, u64 ti
 
     if (R_SUCCEEDED(rc)) rc = _webConfigSetU32(config, WebArgType_DocumentKind, docKind);
 
-    if (R_SUCCEEDED(rc)) rc = _webConfigSetU64(config, docKind != WebDocumentKind_SystemDataPage ? WebArgType_ApplicationId : WebArgType_SystemDataId, titleID);
+    if (R_SUCCEEDED(rc)) rc = _webConfigSetU64(config, docKind != WebDocumentKind_SystemDataPage ? WebArgType_ApplicationId : WebArgType_SystemDataId, id);
 
     if (R_SUCCEEDED(rc)) rc = _webConfigSetString(config, WebArgType_DocumentPath, docPath, 0xC00);
 
@@ -355,7 +354,7 @@ Result webShareCreate(WebCommonConfig* config, WebShareStartPage page) {
     _webArgInitialize(config, AppletId_loginShare, WebShimKind_Share);
 
     rc = webConfigSetLeftStickMode(config, WebLeftStickMode_Cursor);
-    if (R_SUCCEEDED(rc)) rc = webConfigSetUid(config, &uid);
+    if (R_SUCCEEDED(rc)) rc = webConfigSetUid(config, uid);
     if (R_SUCCEEDED(rc)) rc = webConfigSetDisplayUrlKind(config, true);
 
     if (R_SUCCEEDED(rc)) rc = _webConfigSetU8(config, WebArgType_Unknown14, 1);
@@ -377,7 +376,7 @@ Result webLobbyCreate(WebCommonConfig* config) {
     rc = webConfigSetLeftStickMode(config, WebLeftStickMode_Cursor);
     if (R_SUCCEEDED(rc) && config->version >= 0x30000) rc = webConfigSetPointer(config, false); // Added to user-process init with [3.0.0+].
 
-    if (R_SUCCEEDED(rc)) rc = webConfigSetUid(config, &uid);
+    if (R_SUCCEEDED(rc)) rc = webConfigSetUid(config, uid);
 
     if (R_SUCCEEDED(rc)) rc = _webConfigSetU8(config, WebArgType_Unknown14, 1);
     if (R_SUCCEEDED(rc)) rc = _webConfigSetU8(config, WebArgType_Unknown15, 1);
@@ -404,10 +403,10 @@ Result webConfigSetWhitelist(WebCommonConfig* config, const char* whitelist) {
     return _webConfigSetString(config, WebArgType_Whitelist, whitelist, 0x1000);
 }
 
-Result webConfigSetUid(WebCommonConfig* config, AccountUid *uid) {
+Result webConfigSetUid(WebCommonConfig* config, AccountUid uid) {
     WebShimKind shim = _webGetShimKind(config);
     if (shim != WebShimKind_Share && shim != WebShimKind_Web && shim != WebShimKind_Lobby) return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
-    return _webTLVSet(config, WebArgType_Uid, uid, sizeof(*uid));
+    return _webTLVSet(config, WebArgType_Uid, &uid, sizeof(uid));
 }
 
 static Result _webConfigSetAlbumEntryTLV(WebCommonConfig* config, WebArgType type, const CapsAlbumEntry *entry) {

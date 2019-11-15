@@ -2,7 +2,6 @@
 #include <string.h>
 #include "service_guard.h"
 #include "runtime/hosversion.h"
-#include "services/fs.h"
 #include "services/fsldr.h"
 
 static Service g_fsldrSrv;
@@ -34,8 +33,8 @@ Service* fsldrGetServiceSession(void) {
 }
 
 Result fsldrOpenCodeFileSystem(u64 tid, const char *path, FsFileSystem* out) {
-    char send_path[FS_MAX_PATH + 1];
-    strncpy(send_path, path, FS_MAX_PATH);
+    char send_path[FS_MAX_PATH]={0};
+    strncpy(send_path, path, FS_MAX_PATH-1);
 
     serviceAssumeDomain(&g_fsldrSrv);
     return serviceDispatchIn(&g_fsldrSrv, 0, tid,
@@ -52,7 +51,10 @@ Result fsldrOpenCodeFileSystem(u64 tid, const char *path, FsFileSystem* out) {
 
 Result fsldrIsArchivedProgram(u64 pid, bool *out) {
     serviceAssumeDomain(&g_fsldrSrv);
-    return serviceDispatchInOut(&g_fsldrSrv, 1, pid, *out);
+    u8 tmp=0;
+    Result rc = serviceDispatchInOut(&g_fsldrSrv, 1, pid, tmp);
+    if (R_SUCCEEDED(rc) && out) *out = tmp & 1;
+    return rc;
 }
 
 Result _fsldrSetCurrentProcess(void) {

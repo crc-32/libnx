@@ -1,7 +1,6 @@
 #define NX_SERVICE_ASSUME_NON_DOMAIN
 #include "service_guard.h"
 #include "runtime/hosversion.h"
-#include "services/caps.h"
 #include "services/capssc.h"
 
 static Service g_capsscSrv;
@@ -27,15 +26,16 @@ Service* capsscGetServiceSession(void) {
     return &g_capsscSrv;
 }
 
-Result capsscCaptureRawImageWithTimeout(void* buf, size_t size, u32 inval, u64 width, u64 height, s64 buffer_count, s64 buffer_index, u64 timeout) {
+Result capsscCaptureRawImageWithTimeout(void* buf, size_t size, u32 layer_stack, u64 width, u64 height, s64 buffer_count, s64 buffer_index, u64 timeout) {
     const struct {
-        u32 inval;
+        u32 layer_stack;
+        u32 pad;
         u64 width;
         u64 height;
         s64 buffer_count;
         s64 buffer_index;
         u64 timeout;
-    } in = { inval, width, height, buffer_count, buffer_index, timeout };
+    } in = { layer_stack, 0, width, height, buffer_count, buffer_index, timeout };
 
     return serviceDispatchIn(&g_capsscSrv, 2, in,
         .buffer_attrs = { SfBufferAttr_HipcMapTransferAllowsNonSecure | SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },

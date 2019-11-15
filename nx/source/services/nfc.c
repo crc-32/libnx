@@ -1,7 +1,6 @@
 #include "service_guard.h"
 #include <string.h>
 #include "runtime/hosversion.h"
-#include "services/hid.h"
 #include "services/applet.h"
 #include "services/nfc.h"
 
@@ -42,7 +41,7 @@ void nfcSetServiceType(NfcServiceType serviceType) {
 }
 
 Result _nfpInitialize(void) {
-    Result rc=0;
+    Result rc = MAKERESULT(Module_Libnx, LibnxError_BadInput);
     u64 aruid = 0;
 
     // If this fails (for example because we're a sysmodule) aruid stays zero
@@ -189,7 +188,7 @@ static Result _nfcCmdNoInOutU8(Service* srv, u8 *out, u32 cmd_id) {
 static Result _nfcCmdNoInOutBool(Service* srv, bool *out, u32 cmd_id) {
     u8 tmp=0;
     Result rc = _nfcCmdNoInOutU8(srv, &tmp, cmd_id);
-    if (R_SUCCEEDED(rc) && out) *out = tmp!=0;
+    if (R_SUCCEEDED(rc) && out) *out = tmp & 1;
     return rc;
 }
 
@@ -307,7 +306,7 @@ Result nfpCreateApplicationArea(const NfcDeviceHandle *handle, u32 app_id, const
     const struct {
         NfcDeviceHandle handle;
         u32 app_id;
-    } PACKED in = { *handle, app_id };
+    } in = { *handle, app_id };
 
     serviceAssumeDomain(&g_nfpInterface);
     return serviceDispatchIn(&g_nfpInterface, 12, in,

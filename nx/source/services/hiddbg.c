@@ -3,7 +3,6 @@
 #include <string.h>
 #include "kernel/tmem.h"
 #include "services/hiddbg.h"
-#include "services/hid.h"
 #include "runtime/hosversion.h"
 
 static Service g_hiddbgSrv;
@@ -58,6 +57,10 @@ static Result _hiddbgCmdInU8NoOut(u8 inval, u32 cmd_id) {
     return serviceDispatchIn(&g_hiddbgSrv, cmd_id, inval);
 }
 
+static Result _hiddbgCmdInBoolNoOut(bool inval, u32 cmd_id) {
+    return _hiddbgCmdInU8NoOut(inval!=0, cmd_id);
+}
+
 static Result _hiddbgCmdInU64NoOut(u64 inval, u32 cmd_id) {
     return serviceDispatchIn(&g_hiddbgSrv, cmd_id, inval);
 }
@@ -96,8 +99,9 @@ Result hiddbgUpdateDesignInfo(u32 colorBody, u32 colorButtons, u32 colorLeftGrip
         u32 colorLeftGrip;
         u32 colorRightGrip;
         u8 inval;
+        u8 pad[7];
         u64 UniquePadId;
-    } in = { colorBody, colorButtons, colorLeftGrip, colorRightGrip, inval, UniquePadId };
+    } in = { colorBody, colorButtons, colorLeftGrip, colorRightGrip, inval, {0}, UniquePadId };
 
     return serviceDispatchIn(&g_hiddbgSrv, 224, in);
 }
@@ -120,9 +124,10 @@ Result hiddbgAcquireOperationEventHandle(Event* out_event, bool autoclear, u64 U
 static Result _hiddbgReadSerialFlash(TransferMemory *tmem, u32 offset, u64 size, u64 UniquePadId) {
     const struct {
         u32 offset;
+        u32 pad;
         u64 size;
         u64 UniquePadId;
-    } in = { offset, size, UniquePadId };
+    } in = { offset, 0, size, UniquePadId };
 
     return serviceDispatchIn(&g_hiddbgSrv, 229, in,
         .in_num_handles = 1,
@@ -133,10 +138,11 @@ static Result _hiddbgReadSerialFlash(TransferMemory *tmem, u32 offset, u64 size,
 static Result _hiddbgWriteSerialFlash(TransferMemory *tmem, u32 offset, u64 tmem_size, u64 size, u64 UniquePadId) {
     const struct {
         u32 offset;
+        u32 pad;
         u64 tmem_size;
         u64 size;
         u64 UniquePadId;
-    } in = { offset, tmem_size, size, UniquePadId };
+    } in = { offset, 0, tmem_size, size, UniquePadId };
 
     return serviceDispatchIn(&g_hiddbgSrv, 230, in,
         .in_num_handles = 1,
@@ -299,7 +305,7 @@ static void _hiddbgConvertHdlsDeviceInfoFromV7(HiddbgHdlsDeviceInfo *out, const 
     //Leave color*Grip at zero since V7 doesn't have those.
 }
 
-static void _hiddbgConverHiddbgHdlsStateToV7(HiddbgHdlsStateV7 *out, const HiddbgHdlsState *in) {
+static void _hiddbgConvertHiddbgHdlsStateToV7(HiddbgHdlsStateV7 *out, const HiddbgHdlsState *in) {
     memset(out, 0, sizeof(*out));
 
     out->powerConnected = (in->flags & BIT(0)) != 0;
@@ -310,7 +316,7 @@ static void _hiddbgConverHiddbgHdlsStateToV7(HiddbgHdlsStateV7 *out, const Hiddb
     out->unk_x20 = in->unk_x20;
 }
 
-static void _hiddbgConverHiddbgHdlsStateFromV7(HiddbgHdlsState *out, const HiddbgHdlsStateV7 *in) {
+static void _hiddbgConvertHiddbgHdlsStateFromV7(HiddbgHdlsState *out, const HiddbgHdlsStateV7 *in) {
     memset(out, 0, sizeof(*out));
 
     out->batteryCharge = in->batteryCharge;
@@ -329,7 +335,7 @@ static void _hiddbgConvertHdlsStateListToV7(HiddbgHdlsStateListV7 *out, const Hi
     for (s32 i=0; i<count; i++) {
         out->entries[i].HdlsHandle = in->entries[i].HdlsHandle;
         _hiddbgConvertHdlsDeviceInfoToV7(&out->entries[i].device, &in->entries[i].device);
-        _hiddbgConverHiddbgHdlsStateToV7(&out->entries[i].state, &in->entries[i].state);
+        _hiddbgConvertHiddbgHdlsStateToV7(&out->entries[i].state, &in->entries[i].state);
     }
 }
 
@@ -342,7 +348,7 @@ static void _hiddbgConvertHdlsStateListFromV7(HiddbgHdlsStateList *out, const Hi
     for (s32 i=0; i<count; i++) {
         out->entries[i].HdlsHandle = in->entries[i].HdlsHandle;
         _hiddbgConvertHdlsDeviceInfoFromV7(&out->entries[i].device, &in->entries[i].device);
-        _hiddbgConverHiddbgHdlsStateFromV7(&out->entries[i].state, &in->entries[i].state);
+        _hiddbgConvertHiddbgHdlsStateFromV7(&out->entries[i].state, &in->entries[i].state);
     }
 }
 
@@ -382,6 +388,41 @@ Result hiddbgReleaseHdlsWorkBuffer(void) {
 
     rc = _hiddbgCmdNoIO(325);
     tmemClose(&g_hiddbgHdlsTmem);
+    return rc;
+}
+
+Result hiddbgIsHdlsVirtualDeviceAttached(u64 HdlsHandle, bool *isAttached) {
+    Result rc = 0;
+
+    if (hosversionBefore(7,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    if (!g_hiddbgHdlsInitialized)
+        return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+
+    rc = _hiddbgCmdNoIO(327);
+    if (R_FAILED(rc)) return rc;
+    if (isAttached) {
+        *isAttached = false;
+        if (hosversionBefore(9,0,0)) {
+            HiddbgHdlsStateListV7 *stateList = (HiddbgHdlsStateListV7*)(g_hiddbgHdlsTmem.src_addr);
+            for (s32 i=0; i<stateList->total_entries; i++) {
+                if (stateList->entries[i].HdlsHandle == HdlsHandle) {
+                    *isAttached = true;
+                    break;
+                }
+            }
+        }
+        else {
+            HiddbgHdlsStateList *stateList = (HiddbgHdlsStateList*)(g_hiddbgHdlsTmem.src_addr);
+            for (s32 i=0; i<stateList->total_entries; i++) {
+                if (stateList->entries[i].HdlsHandle == HdlsHandle) {
+                    *isAttached = true;
+                    break;
+                }
+            }
+        }
+    }
     return rc;
 }
 
@@ -434,7 +475,7 @@ Result hiddbgApplyHdlsNpadAssignmentState(const HiddbgHdlsNpadAssignment *state,
         return MAKERESULT(Module_Libnx, LibnxError_BadInput);
 
     memcpy(g_hiddbgHdlsTmem.src_addr, state, sizeof(*state));
-    return _hiddbgCmdInU8NoOut(flag!=0, 328);
+    return _hiddbgCmdInBoolNoOut(flag, 328);
 }
 
 Result hiddbgApplyHdlsStateList(const HiddbgHdlsStateList *state) {
@@ -497,7 +538,7 @@ static Result _hiddbgSetHdlsStateV7(u64 HdlsHandle, const HiddbgHdlsState *state
         HiddbgHdlsStateV7 state;
         u64 handle;
     } in = { .handle = HdlsHandle };
-    _hiddbgConverHiddbgHdlsStateToV7(&in.state, state);
+    _hiddbgConvertHiddbgHdlsStateToV7(&in.state, state);
 
     return serviceDispatchIn(&g_hiddbgSrv, 332, in);
 }

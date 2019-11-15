@@ -1,11 +1,7 @@
 #include "service_guard.h"
 #include <string.h>
-#include "kernel/event.h"
-#include "kernel/tmem.h"
 #include "services/grc.h"
-#include "services/caps.h"
 #include "services/applet.h"
-#include "display/native_window.h"
 #include "audio/audio.h"
 #include "runtime/hosversion.h"
 
@@ -377,11 +373,11 @@ Result grcdBegin(void) {
     return _grcCmdNoIO(&g_grcdSrv, 1);
 }
 
-Result grcdRead(GrcStream stream, void* buffer, size_t size, u32 *unk, u32 *data_size, u64 *timestamp) {
+Result grcdTransfer(GrcStream stream, void* buffer, size_t size, u32 *num_frames, u32 *data_size, u64 *start_timestamp) {
     struct {
-        u32 unk;
+        u32 num_frames;
         u32 data_size;
-        u64 timestamp;
+        u64 start_timestamp;
     } out;
 
     u32 tmp=stream;
@@ -390,9 +386,9 @@ Result grcdRead(GrcStream stream, void* buffer, size_t size, u32 *unk, u32 *data
         .buffers = { { buffer, size } },
     );
     if (R_SUCCEEDED(rc)) {
-        if (unk) *unk = out.unk;
+        if (num_frames) *num_frames = out.num_frames;
         if (data_size) *data_size = out.data_size;
-        if (timestamp) *timestamp = out.timestamp;
+        if (start_timestamp) *start_timestamp = out.start_timestamp;
     }
     return rc;
 }

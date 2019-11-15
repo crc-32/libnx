@@ -39,9 +39,6 @@ Result _audoutInitialize(void) {
     // Register global handle for buffer events
     if (R_SUCCEEDED(rc))
         rc = _audoutRegisterBufferEvent(&g_audoutBufferEvent);
-    
-    if (R_FAILED(rc))
-        audoutExit();
 
     return rc;
 }
@@ -220,6 +217,6 @@ Result audoutContainsAudioOutBuffer(AudioOutBuffer *Buffer, bool *ContainsBuffer
     u64 tmp = (u64)Buffer;
     u8 out=0;
     Result rc = serviceDispatchInOut(&g_audoutIAudioOut, 6, tmp, out);
-    if (R_SUCCEEDED(rc) && ContainsBuffer) *ContainsBuffer = out!=0;
+    if (R_SUCCEEDED(rc) && ContainsBuffer) *ContainsBuffer = out & 1;
     return rc;
 }

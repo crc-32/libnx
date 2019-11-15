@@ -98,11 +98,7 @@ Result _audrenInitialize(const AudioRendererConfig* config) {
                 if (R_SUCCEEDED(rc)) {
                     // Finally, get the handle to the system event
                     rc = _audrenQuerySystemEvent(&g_audrenEvent);
-                    if (R_FAILED(rc))
-                        serviceClose(&g_audrenIAudioRenderer);
                 }
-                if (R_FAILED(rc))
-                    tmemClose(&g_audrenWorkBuf);
             }
         }
         serviceClose(&audrenMgrSrv);
@@ -151,9 +147,10 @@ void audrenWaitFrame(void) {
 Result _audrenOpenAudioRenderer(Service* srv, Service* srv_out, const AudioRendererParameter* param, u64 aruid) {
     const struct {
         AudioRendererParameter param;
+        u32 pad;
         u64 work_buffer_size;
         u64 aruid;
-    } in = { *param, g_audrenWorkBuf.size, aruid };
+    } in = { *param, 0, g_audrenWorkBuf.size, aruid };
 
     return serviceDispatchIn(srv, 0, in,
         .in_send_pid = true,

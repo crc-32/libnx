@@ -53,7 +53,19 @@ typedef enum {
     SetRegion_TWN = 6, ///< Taiwan
 } SetRegion;
 
-/// Structure returned by \ref setsysGetFirmwareVersion
+/// PlatformRegion. Other values not listed here should be handled as "Unknown".
+typedef enum {
+    SetSysPlatformRegion_Global = 1,
+    SetSysPlatformRegion_China  = 2,
+} SetSysPlatformRegion;
+
+/// TouchScreenMode, for "Touch-Screen Sensitivity".
+typedef enum {
+    SetSysTouchScreenMode_Stylus   = 0,   ///< Stylus.
+    SetSysTouchScreenMode_Standard = 1,   ///< Standard, the default.
+} SetSysTouchScreenMode;
+
+/// Structure returned by \ref setsysGetFirmwareVersion.
 typedef struct {
     u8 major;
     u8 minor;
@@ -68,6 +80,15 @@ typedef struct {
     char display_version[0x18];
     char display_title[0x80];
 } SetSysFirmwareVersion;
+
+/// Output from \ref setsysGetHomeMenuScheme. This contains RGBA8 colors which correspond with the physical shell of the system.
+typedef struct {
+    u32 main_color;       ///< Main Color.
+    u32 back_color;       ///< Back Color.
+    u32 sub_color;        ///< Sub Color.
+    u32 bezel_color;      ///< Bezel Color.
+    u32 extra_color;      ///< Extra Color.
+} SetSysHomeMenuScheme;
 
 /// Initialize set.
 Result setInitialize(void);
@@ -394,3 +415,68 @@ Result setsysGetRequiresRunRepairTimeReviser(bool *out);
  * @param[in] flag Input flag.
  */
 Result setsysSetRequiresRunRepairTimeReviser(bool flag);
+
+/**
+ * @brief GetPctlReadyFlag
+ * @note Only available on [6.0.0+].
+ * @param[out] out Output flag.
+ */
+Result setsysGetPctlReadyFlag(bool *out);
+
+/**
+ * @brief SetPctlReadyFlag
+ * @note Only available on [6.0.0+].
+ * @param[in] flag Input flag.
+ */
+Result setsysSetPctlReadyFlag(bool flag);
+
+/**
+ * @brief Gets the \ref SetSysHomeMenuScheme.
+ * @note Only available on [9.0.0+].
+ * @param[out] out \ref SetSysHomeMenuScheme
+ */
+Result setsysGetHomeMenuScheme(SetSysHomeMenuScheme *out);
+
+/**
+ * @brief Gets the \ref SetSysPlatformRegion.
+ * @note This is used internally by \ref appletGetSettingsPlatformRegion.
+ * @note Only available on [9.0.0+].
+ * @param[out] out \ref SetSysPlatformRegion
+ */
+Result setsysGetPlatformRegion(SetSysPlatformRegion *out);
+
+/**
+ * @brief Sets the \ref SetSysPlatformRegion.
+ * @note Only available on [9.0.0+].
+ * @param[in] region \ref SetSysPlatformRegion
+ */
+Result setsysSetPlatformRegion(SetSysPlatformRegion region);
+
+/**
+ * @brief GetHomeMenuSchemeModel
+ * @note This will throw an error when loading the "settings_debug!{...}" system-setting which is used with this fails.
+ * @note Only available on [9.0.0+].
+ * @param[out] out HomeMenuSchemeModel.
+ */
+Result setsysGetHomeMenuSchemeModel(u32 *out);
+
+/**
+ * @brief GetMemoryUsageRateFlag
+ * @note Only available on [9.0.0+].
+ * @param[out] out Output flag.
+ */
+Result setsysGetMemoryUsageRateFlag(bool *out);
+
+/**
+ * @brief Gets the \ref SetSysTouchScreenMode.
+ * @note Only available on [9.0.0+].
+ * @param[out] out \ref SetSysTouchScreenMode
+ */
+Result setsysGetTouchScreenMode(SetSysTouchScreenMode *out);
+
+/**
+ * @brief Sets the \ref SetSysTouchScreenMode.
+ * @note Only available on [9.0.0+].
+ * @param[in] mode \ref SetSysTouchScreenMode
+ */
+Result setsysSetTouchScreenMode(SetSysTouchScreenMode mode);

@@ -2,7 +2,6 @@
 #include <string.h>
 #include "arm/cache.h"
 #include "runtime/hosversion.h"
-#include "services/usb.h"
 #include "services/usbhs.h"
 
 static Service g_usbHsSrv;
@@ -34,7 +33,6 @@ Result _usbHsInitialize(void) {
 
 void _usbHsCleanup(void) {
     eventClose(&g_usbHsInterfaceStateChangeEvent);
-
     serviceClose(&g_usbHsSrv);
 }
 
@@ -94,12 +92,35 @@ static Result _usbHsBindClientProcess(Handle prochandle) {
     );
 }
 
+// The INPUT/OUTPUT endpoint descriptors were swapped with [8.0.0+], however the sysmodule code which writes this output struct was basically unchanged.
+static void _usbHsConvertInterfaceInfoToV8(UsbHsInterfaceInfo *info) {
+    UsbHsInterfaceInfo tmp;
+    if (hosversionAtLeast(8,0,0) || info==NULL) return;
+
+    memcpy(&tmp, info, sizeof(UsbHsInterfaceInfo));
+
+    memcpy(info->output_endpoint_descs, tmp.input_endpoint_descs, sizeof(tmp.input_endpoint_descs));
+    memcpy(info->input_endpoint_descs, tmp.output_endpoint_descs, sizeof(tmp.output_endpoint_descs));
+    memcpy(info->output_ss_endpoint_companion_descs, tmp.input_ss_endpoint_companion_descs, sizeof(tmp.input_ss_endpoint_companion_descs));
+    memcpy(info->input_ss_endpoint_companion_descs, tmp.output_ss_endpoint_companion_descs, sizeof(tmp.output_ss_endpoint_companion_descs));
+}
+
+static void _usbHsConvertInterfacesToV8(UsbHsInterface* interfaces, s32 total_entries) {
+    for (s32 i=0; i<total_entries; i++) {
+        _usbHsConvertInterfaceInfoToV8(&interfaces[i].inf);
+    }
+}
+
 static Result _usbHsQueryInterfaces(u32 base_cmdid, const UsbHsInterfaceFilter* filter, UsbHsInterface* interfaces, size_t interfaces_maxsize, s32* total_entries) {
     serviceAssumeDomain(&g_usbHsSrv);
-    return serviceDispatchInOut(&g_usbHsSrv, hosversionAtLeast(2,0,0) ? base_cmdid+1 : base_cmdid, *filter, *total_entries,
+    s32 tmp=0;
+    Result rc = serviceDispatchInOut(&g_usbHsSrv, hosversionAtLeast(2,0,0) ? base_cmdid+1 : base_cmdid, *filter, tmp,
         .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
         .buffers = { { interfaces, interfaces_maxsize } },
     );
+    if (R_SUCCEEDED(rc) && total_entries) *total_entries = tmp;
+    if (R_SUCCEEDED(rc)) _usbHsConvertInterfacesToV8(interfaces, tmp);
+    return rc;
 }
 
 Result usbHsQueryAllInterfaces(const UsbHsInterfaceFilter* filter, UsbHsInterface* interfaces, size_t interfaces_maxsize, s32* total_entries) {
@@ -112,10 +133,14 @@ Result usbHsQueryAvailableInterfaces(const UsbHsInterfaceFilter* filter, UsbHsIn
 
 Result usbHsQueryAcquiredInterfaces(UsbHsInterface* interfaces, size_t interfaces_maxsize, s32* total_entries) {
     serviceAssumeDomain(&g_usbHsSrv);
-    return serviceDispatchOut(&g_usbHsSrv, hosversionAtLeast(2,0,0) ? 3 : 2, *total_entries,
+    s32 tmp=0;
+    Result rc = serviceDispatchOut(&g_usbHsSrv, hosversionAtLeast(2,0,0) ? 3 : 2, tmp,
         .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
         .buffers = { { interfaces, interfaces_maxsize } },
     );
+    if (R_SUCCEEDED(rc) && total_entries) *total_entries = tmp;
+    if (R_SUCCEEDED(rc)) _usbHsConvertInterfacesToV8(interfaces, tmp);
+    return rc;
 }
 
 Result usbHsCreateInterfaceAvailableEvent(Event* out_event, bool autoclear, u8 index, const UsbHsInterfaceFilter* filter) {
@@ -181,6 +206,7 @@ Result usbHsAcquireUsbIf(UsbHsClientIfSession* s, UsbHsInterface *interface) {
         rc = _usbHsAcquireUsbIfOld(s, interface);
 
     if (R_SUCCEEDED(rc)) {
+        _usbHsConvertInterfaceInfoToV8(&interface->inf);
         rc = _usbHsGetEvent(&s->s, &s->event0, false, 0);
         if (hosversionAtLeast(2,0,0)) rc = _usbHsGetEvent(&s->s, &s->eventCtrlXfer, false, 6);
 
@@ -191,6 +217,7 @@ Result usbHsAcquireUsbIf(UsbHsClientIfSession* s, UsbHsInterface *interface) {
 }
 
 void usbHsIfClose(UsbHsClientIfSession* s) {
+    serviceAssumeDomain(&s->s);
     serviceClose(&s->s);
     eventClose(&s->event0);
     eventClose(&s->eventCtrlXfer);
@@ -201,10 +228,12 @@ static Result _usbHsIfGetInf(UsbHsClientIfSession* s, UsbHsInterfaceInfo* inf, u
     if (inf==NULL) inf = &s->inf.inf;
 
     serviceAssumeDomain(&s->s);
-    return serviceDispatchIn(&s->s, cmd_id, id,
+    Result rc = serviceDispatchIn(&s->s, cmd_id, id,
         .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
         .buffers = { { inf, sizeof(UsbHsInterfaceInfo) } },
     );
+    if (R_SUCCEEDED(rc)) _usbHsConvertInterfaceInfoToV8(inf);
+    return rc;
 }
 
 Result usbHsIfSetInterface(UsbHsClientIfSession* s, UsbHsInterfaceInfo* inf, u8 id) {
@@ -218,7 +247,9 @@ Result usbHsIfGetAlternateInterface(UsbHsClientIfSession* s, UsbHsInterfaceInfo*
 Result usbHsIfGetInterface(UsbHsClientIfSession* s, UsbHsInterfaceInfo* inf) {
     if (inf==NULL) inf = &s->inf.inf;
 
-    return _usbHsCmdRecvBufNoOut(&s->s, inf, sizeof(UsbHsInterfaceInfo), 2);
+    Result rc = _usbHsCmdRecvBufNoOut(&s->s, inf, sizeof(UsbHsInterfaceInfo), 2);
+    if (R_SUCCEEDED(rc)) _usbHsConvertInterfaceInfoToV8(inf);
+    return rc;
 }
 
 Result usbHsIfGetCurrentFrame(UsbHsClientIfSession* s, u32* out) {
@@ -257,7 +288,7 @@ static Result _usbHsIfCtrlXferAsync(UsbHsClientIfSession* s, u8 bmRequestType, u
         u16 wIndex;
         u16 wLength;
         u64 buffer;
-    } PACKED in = { bmRequestType, bRequest, wValue, wIndex, wLength, (u64)buffer };
+    } in = { bmRequestType, bRequest, wValue, wIndex, wLength, (u64)buffer };
 
     serviceAssumeDomain(&s->s);
     return serviceDispatchIn(&s->s, 5, in);
@@ -293,12 +324,14 @@ Result usbHsIfCtrlXfer(UsbHsClientIfSession* s, u8 bmRequestType, u8 bRequest, u
 static Result _usbHsIfOpenUsbEp(UsbHsClientIfSession* s, UsbHsClientEpSession* ep, u16 maxUrbCount, u32 maxXferSize, struct usb_endpoint_descriptor *desc) {
     const struct {
         u16 maxUrbCount;
+        u16 pad;
         u32 epType;
         u32 epNumber;
         u32 epDirection;
         u32 maxXferSize;
     } in = {
         maxUrbCount,
+        0,
         (desc->bmAttributes & USB_TRANSFER_TYPE_MASK) + 1,
         desc->bEndpointAddress & USB_ENDPOINT_ADDRESS_MASK,
         (desc->bEndpointAddress & USB_ENDPOINT_IN) == 0 ? 0x1 : 0x2,
@@ -322,6 +355,7 @@ Result usbHsIfOpenUsbEp(UsbHsClientIfSession* s, UsbHsClientEpSession* ep, u16 m
         }
 
         if (R_FAILED(rc)) {
+            serviceAssumeDomain(&s->s);
             serviceClose(&ep->s);
             eventClose(&ep->eventXfer);
         }
@@ -338,6 +372,7 @@ void usbHsEpClose(UsbHsClientEpSession* s) {
 
     _usbHsCmdNoIO(&s->s, hosversionAtLeast(2,0,0) ? 1 : 3);//Close
 
+    serviceAssumeDomain(&s->s);
     serviceClose(&s->s);
     eventClose(&s->eventXfer);
     memset(s, 0, sizeof(UsbHsClientEpSession));
@@ -366,9 +401,10 @@ static Result _usbHsEpSubmitRequest(UsbHsClientEpSession* s, void* buffer, u32 s
 static Result _usbHsEpPostBufferAsync(UsbHsClientEpSession* s, void* buffer, u32 size, u64 unk, u32* xferId) {
     const struct {
         u32 size;
+        u32 pad;
         u64 buffer;
         u64 unk;
-    } in = { size, (u64)buffer, unk };
+    } in = { size, 0, (u64)buffer, unk };
 
     serviceAssumeDomain(&s->s);
     return serviceDispatchInOut(&s->s, 4, in, *xferId);

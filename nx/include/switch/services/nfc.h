@@ -8,7 +8,6 @@
 #pragma once
 #include "../types.h"
 #include "../sf/service.h"
-#include "../services/hid.h"
 
 /// NfpServiceType
 typedef enum {
@@ -144,7 +143,7 @@ typedef struct {
 
 /// Nfc/Nfp DeviceHandle
 typedef struct {
-    u64 handle;            ///< Handle.
+    u8 handle[0x8];            ///< Handle.
 } NfcDeviceHandle;
 
 /**
@@ -168,7 +167,7 @@ void nfpExit(void);
 /// Initialize nfc:*.
 Result nfcInitialize(void);
 
-/// Exit nfc:*..
+/// Exit nfc:*.
 void nfcExit(void);
 
 /// Gets the Service object for the actual nfp:* service session.
