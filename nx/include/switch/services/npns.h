@@ -5,6 +5,7 @@
  */
 #pragma once
 #include "../types.h"
+#include "../sf/service.h"
 
 Result npnsInitialize();
 void npnsExit();
