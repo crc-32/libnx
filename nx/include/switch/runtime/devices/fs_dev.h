@@ -31,13 +31,14 @@ NX_CONSTEXPR FsDirectoryEntry* fsdevDirGetEntries(fsdev_dir_t *dir)
 Result fsdevMountSdmc(void);
 
 /// Mounts the specified save data.
-Result fsdevMountSaveData(const char *name, u64 program_id, AccountUid uid);
+Result fsdevMountSaveData(const char *name, u64 application_id, AccountUid uid);
 
 /// Mounts the specified system save data.
-Result fsdevMountSystemSaveData(const char *name, FsSaveDataSpaceId saveDataSpaceId, u64 saveID, AccountUid uid);
+Result fsdevMountSystemSaveData(const char *name, FsSaveDataSpaceId save_data_space_id, u64 system_save_data_id, AccountUid uid);
 
 /// Mounts the input fs with the specified device name. fsdev will handle closing the fs when required, including when fsdevMountDevice() fails.
 /// Returns -1 when any errors occur.
+/// Input device name string shouldn't exceed 31 characters, and shouldn't have a trailing colon.
 int fsdevMountDevice(const char *name, FsFileSystem fs);
 
 /// Unmounts the specified device.
@@ -53,8 +54,11 @@ FsFileSystem* fsdevGetDeviceFileSystem(const char *name);
 /// Writes the FS-path to outpath (which has buffer size FS_MAX_PATH), for the input path (as used in stdio). The FsFileSystem is also written to device when not NULL.
 int fsdevTranslatePath(const char *path, FsFileSystem** device, char *outpath);
 
-/// This calls fsFsSetArchiveBit on the filesystem specified by the input path (as used in stdio).
-Result fsdevSetArchiveBit(const char *path);
+/// This calls fsFsSetConcatenationFileAttribute on the filesystem specified by the input path (as used in stdio).
+Result fsdevSetConcatenationFileAttribute(const char *path);
+
+// Uses \ref fsFsIsValidSignedSystemPartitionOnSdCard with the specified device.
+Result fsdevIsValidSignedSystemPartitionOnSdCard(const char *name, bool *out);
 
 /// This calls fsFsCreateFile on the filesystem specified by the input path (as used in stdio).
 Result fsdevCreateFile(const char* path, size_t size, u32 flags);

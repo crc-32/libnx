@@ -36,7 +36,6 @@ extern "C" {
 #include "switch/kernel/detect.h"
 #include "switch/kernel/random.h"
 #include "switch/kernel/jit.h"
-#include "switch/kernel/ipc.h" // Deprecated
 #include "switch/kernel/barrier.h"
 
 #include "switch/sf/hipc.h"
@@ -127,7 +126,9 @@ extern "C" {
 #include "switch/applets/libapplet.h"
 #include "switch/applets/album_la.h"
 #include "switch/applets/friends_la.h"
+#include "switch/applets/hid_la.h"
 #include "switch/applets/pctlauth.h"
+#include "switch/applets/psel.h"
 #include "switch/applets/error.h"
 #include "switch/applets/swkbd.h"
 #include "switch/applets/web.h"

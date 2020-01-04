@@ -118,8 +118,10 @@ Result _appletInitialize(void) {
     if (__nx_applet_type == AppletType_None)
         return 0;
 
-    if (R_FAILED(apmInitialize()))
-        return MAKERESULT(Module_Libnx, LibnxError_ApmFailedToInitialize);
+    if (__nx_applet_type == AppletType_Default || __nx_applet_type == AppletType_Application) {
+        if (R_FAILED(apmInitialize()))
+            return MAKERESULT(Module_Libnx, LibnxError_ApmFailedToInitialize);
+    }
 
     Result rc = 0;
 
@@ -334,6 +336,7 @@ static void _appletInfiniteSleepLoop(void) {
 }
 
 static void NORETURN _appletExitProcess(int result_code) {
+    appletInitialize();
     appletExit();
 
     if (R_SUCCEEDED(g_appletExitProcessResult)) _appletInfiniteSleepLoop();
@@ -421,8 +424,6 @@ void _appletCleanup(void) {
     serviceClose(&g_appletSrv);
     g_appletResourceUserId = 0;
 
-    apmExit();
-
     if (g_appletRecordingInitialized > 0) {
         tmemClose(&g_appletRecordingTmem);
         g_appletRecordingInitialized = 0;
@@ -432,6 +433,8 @@ void _appletCleanup(void) {
         tmemClose(&g_appletCopyrightTmem);
         g_appletCopyrightInitialized = 0;
     }
+
+    if (_appletIsRegularApplication()) apmExit();
 }
 
 Service* appletGetServiceSession_Proxy(void) {
@@ -1056,7 +1059,7 @@ IPC_MAKE_CMD_IMPL(static Result _appletSetOutOfFocusSuspendingEnabled(bool flag)
 IPC_MAKE_CMD_IMPL_HOSVER(Result appletSetControllerFirmwareUpdateSection(bool flag),               &g_appletISelfController, 17, _appletCmdInBoolNoOut, (3,0,0), flag)
 IPC_MAKE_CMD_IMPL_HOSVER(Result appletSetRequiresCaptureButtonShortPressedMessage(bool flag),      &g_appletISelfController, 18, _appletCmdInBoolNoOut, (3,0,0), flag)
 IPC_MAKE_CMD_IMPL_HOSVER(Result appletSetAlbumImageOrientation(AlbumImageOrientation orientation), &g_appletISelfController, 19, _appletCmdInU32NoOut,  (3,0,0), orientation)
-IPC_MAKE_CMD_IMPL_HOSVER(Result appletSetDesirableKeyboardLayout(u32 layout),                      &g_appletISelfController, 20, _appletCmdInU32NoOut,  (4,0,0), layout)
+IPC_MAKE_CMD_IMPL_HOSVER(Result appletSetDesirableKeyboardLayout(SetKeyboardLayout layout),        &g_appletISelfController, 20, _appletCmdInU32NoOut,  (4,0,0), layout)
 IPC_MAKE_CMD_IMPL(       Result appletCreateManagedDisplayLayer(u64 *out),                         &g_appletISelfController, 40, _appletCmdNoInOutU64,           out)
 IPC_MAKE_CMD_IMPL_HOSVER(Result appletIsSystemBufferSharingEnabled(void),                          &g_appletISelfController, 41, _appletCmdNoIO,        (4,0,0))
 
@@ -2005,7 +2008,7 @@ void appletNotifyRunning(bool *out) {
     if (R_FAILED(rc)) fatalThrow(MAKERESULT(Module_Libnx, LibnxError_BadAppletNotifyRunning));
 }
 
-Result appletGetPseudoDeviceId(u128 *out) {
+Result appletGetPseudoDeviceId(Uuid *out) {
     if (!serviceIsActive(&g_appletSrv) || !_appletIsApplication())
         return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
     if (hosversionBefore(2,0,0))
@@ -2593,7 +2596,19 @@ Result appletGetCallerAppletIdentityInfoStack(AppletIdentityInfo *stack, s32 cou
 }
 
 IPC_MAKE_CMD_IMPL_INITEXPR_HOSVER(Result appletGetNextReturnDestinationAppletIdentityInfo(AppletIdentityInfo *info), &g_appletILibraryAppletSelfAccessor, 18,  _appletGetIdentityInfo,     __nx_applet_type != AppletType_LibraryApplet, (4,0,0), info)
-IPC_MAKE_CMD_IMPL_INITEXPR_HOSVER(Result appletGetDesirableKeyboardLayout(u32 *layout),                              &g_appletILibraryAppletSelfAccessor, 19,  _appletCmdNoInOutU32,       __nx_applet_type != AppletType_LibraryApplet, (4,0,0), layout)
+
+Result appletGetDesirableKeyboardLayout(SetKeyboardLayout *layout) {
+    if (__nx_applet_type != AppletType_LibraryApplet)
+        return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    u32 tmp=0;
+    Result rc = _appletCmdNoInOutU32(&g_appletILibraryAppletSelfAccessor, &tmp, 19);
+    if (R_SUCCEEDED(rc) && layout) *layout = tmp;
+    return rc;
+}
+
 IPC_MAKE_CMD_IMPL_INITEXPR(       Result appletPopExtraStorage(AppletStorage *s),                                    &g_appletILibraryAppletSelfAccessor, 20,  _appletCmdNoInOutStorage,   __nx_applet_type != AppletType_LibraryApplet,          s)
 IPC_MAKE_CMD_IMPL_INITEXPR(       Result appletGetPopExtraStorageEvent(Event *out_event),                            &g_appletILibraryAppletSelfAccessor, 25,  _appletCmdGetEvent,         __nx_applet_type != AppletType_LibraryApplet,          out_event, false)
 IPC_MAKE_CMD_IMPL_INITEXPR(       Result appletUnpopInData(AppletStorage *s),                                        &g_appletILibraryAppletSelfAccessor, 30,  _appletCmdInStorage,        __nx_applet_type != AppletType_LibraryApplet,          s)
@@ -2663,7 +2678,6 @@ Result appletStartRebootSequenceForOverlay(void) {
     return rc;
 }
 
-IPC_MAKE_CMD_IMPL_INITEXPR_HOSVER(Result appletSetHandlingHomeButtonShortPressedEnabled(bool flag), &g_appletIFunctions, 20,  _appletCmdInBoolNoOut, __nx_applet_type != AppletType_OverlayApplet, (8,0,0), flag)
 IPC_MAKE_CMD_IMPL_INITEXPR_HOSVER(Result appletSetHealthWarningShowingState(bool flag),             &g_appletIFunctions, 30,  _appletCmdInBoolNoOut, __nx_applet_type != AppletType_OverlayApplet, (9,0,0), flag)
 IPC_MAKE_CMD_IMPL_INITEXPR_HOSVER(Result appletBeginToObserveHidInputForDevelop(void),              &g_appletIFunctions, 101, _appletCmdNoIO,        __nx_applet_type != AppletType_OverlayApplet, (5,0,0))
 
@@ -2818,6 +2832,22 @@ Result appletGetGpuErrorDetectedSystemEvent(Event *out_event) {
         srv = &g_appletILibraryAppletSelfAccessor;
 
     return _appletCmdGetEvent(srv, out_event, false, 130);
+}
+
+Result appletSetHandlingHomeButtonShortPressedEnabled(bool flag) {
+    if (__nx_applet_type == AppletType_OverlayApplet && hosversionBefore(8,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+    if (__nx_applet_type != AppletType_OverlayApplet && hosversionBefore(9,1,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    Service *srv = &g_appletIFunctions;
+    u32 cmd_id = 20;
+    if (__nx_applet_type != AppletType_OverlayApplet && hosversionAtLeast(9,1,0)) {
+        srv = &g_appletICommonStateGetter;
+        cmd_id = 100;
+    }
+
+    return _appletCmdInBoolNoOut(srv, flag, cmd_id);
 }
 
 // State / other

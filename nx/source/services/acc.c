@@ -6,7 +6,7 @@
 #include "runtime/env.h"
 #include "runtime/hosversion.h"
 
-static AccountServiceType g_accServiceType = AccountServiceType_NotInitialized;
+static AccountServiceType g_accServiceType;
 static Service g_accSrv;
 static AccountUid g_accPreselectedUserID;
 static bool g_accPreselectedUserInitialized;
@@ -15,21 +15,16 @@ static Result _accountInitializeApplicationInfo(void);
 
 static Result _accountGetPreselectedUser(AccountUid *uid);
 
-NX_GENERATE_SERVICE_GUARD(account);
+NX_GENERATE_SERVICE_GUARD_PARAMS(account, (AccountServiceType service_type), (service_type));
 
-void accountSetServiceType(AccountServiceType serviceType) {
-    g_accServiceType = serviceType;
-}
-
-Result _accountInitialize(void) {
+Result _accountInitialize(AccountServiceType service_type) {
     Result rc = MAKERESULT(Module_Libnx, LibnxError_BadInput);
     Result rc2=0;
     AccountUid *userIdEnv = envGetUserIdStorage();
 
+    g_accServiceType = service_type;
     switch (g_accServiceType) {
-        case AccountServiceType_NotInitialized:
         case AccountServiceType_Application:
-            g_accServiceType = AccountServiceType_Application;
             rc = smGetService(&g_accSrv, "acc:u0");
             if (R_SUCCEEDED(rc)) rc = _accountInitializeApplicationInfo();
             break;
@@ -58,7 +53,6 @@ Result _accountInitialize(void) {
 
 void _accountCleanup(void) {
     serviceClose(&g_accSrv);
-    g_accServiceType = AccountServiceType_NotInitialized;
 }
 
 Service* accountGetServiceSession(void) {
@@ -120,6 +114,21 @@ Result accountGetProfile(AccountProfile* out, AccountUid uid) {
         .out_num_objects = 1,
         .out_objects = &out->s,
     );
+}
+
+Result accountIsUserRegistrationRequestPermitted(bool *out) {
+    u64 pid_placeholder=0;
+    u8 tmp=0;
+    Result rc = serviceDispatchInOut(&g_accSrv, 50, pid_placeholder, tmp,
+        .in_send_pid = true,
+    );
+    if (R_SUCCEEDED(rc) && out) *out = tmp & 1;
+    return rc;
+}
+
+Result accountTrySelectUserWithoutInteraction(AccountUid *uid, bool is_network_service_account_required) {
+    u8 tmp=is_network_service_account_required!=0;
+    return serviceDispatchInOut(&g_accSrv, 51, tmp, *uid);
 }
 
 // IProfile

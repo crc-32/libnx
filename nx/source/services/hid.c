@@ -719,6 +719,19 @@ static Result _hidCmdOutU32(u32 *out, u32 cmd_id) {
     );
 }
 
+static Result _hidCmdOutU64(u64 *out, u32 cmd_id) {
+    Result rc;
+    u64 AppletResourceUserId;
+
+    rc = appletGetAppletResourceUserId(&AppletResourceUserId);
+    if (R_FAILED(rc))
+        AppletResourceUserId = 0;
+
+    return serviceDispatchInOut(&g_hidSrv, cmd_id, AppletResourceUserId, *out,
+        .in_send_pid = true,
+    );
+}
+
 static Result _hidCmdNoInOutU8(u8 *out, u32 cmd_id) {
     return serviceDispatchOut(&g_hidSrv, cmd_id, *out);
 }
@@ -788,7 +801,18 @@ Result hidSetSupportedNpadIdType(HidControllerID *buf, size_t count) {
 }
 
 static Result _hidActivateNpad(void) {
-    return _hidCmdWithNoInput(103);
+    u32 revision=0x0;
+
+    if (hosversionBefore(5,0,0))
+        return _hidCmdWithNoInput(103); // ActivateNpad
+
+    revision = 0x1; // [5.0.0+]
+    if (hosversionAtLeast(6,0,0))
+        revision = 0x2; // [6.0.0+]
+    if (hosversionAtLeast(8,0,0))
+        revision = 0x3; // [8.0.0+]
+
+    return _hidCmdWithInputU32(revision, 109); // ActivateNpadWithRevision
 }
 
 static Result _hidDeactivateNpad(void) {
@@ -822,6 +846,13 @@ Result hidAcquireNpadStyleSetUpdateEventHandle(HidControllerID id, Event* out_ev
 
 Result hidSetNpadJoyHoldType(HidJoyHoldType type) {
     return _hidCmdWithInputU64(type, 120);
+}
+
+Result hidGetNpadJoyHoldType(HidJoyHoldType *type) {
+    u64 tmp=0;
+    Result rc = _hidCmdOutU64(&tmp, 121);
+    if (R_SUCCEEDED(rc) && type) *type = tmp;
+    return rc;
 }
 
 Result hidSetNpadJoyAssignmentModeSingleByDefault(HidControllerID id) {
@@ -1067,8 +1098,8 @@ Result hidStopSixAxisSensor(u32 SixAxisSensorHandle) {
     return rc;
 }
 
-static Result _hidActivateSevenSixAxisSensor(void) {
-    if (hosversionBefore(5,0,0))
+static Result _hidActivateConsoleSixAxisSensor(void) {
+    if (hosversionBefore(3,0,0))
         return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
 
     return _hidCmdWithNoInput(303);
@@ -1118,6 +1149,9 @@ Result hidInitializeSevenSixAxisSensor(void) {
     if (g_sevenSixAxisSensorBuffer != NULL)
         return MAKERESULT(Module_Libnx, LibnxError_AlreadyInitialized);
 
+    rc = _hidActivateConsoleSixAxisSensor();
+    if (R_FAILED(rc)) return rc;
+
     g_sevenSixAxisSensorBuffer = (u8*)memalign(0x1000, bufsize);
     if (g_sevenSixAxisSensorBuffer == NULL)
         return MAKERESULT(Module_Libnx, LibnxError_OutOfMemory);
@@ -1127,12 +1161,6 @@ Result hidInitializeSevenSixAxisSensor(void) {
     if (R_SUCCEEDED(rc)) rc = tmemCreateFromMemory(&g_sevenSixAxisSensorTmem1, &g_sevenSixAxisSensorBuffer[0x1000], bufsize-0x1000, Perm_None);
 
     if (R_SUCCEEDED(rc)) rc = _hidInitializeSevenSixAxisSensor(&g_sevenSixAxisSensorTmem0, &g_sevenSixAxisSensorTmem1);
-
-    if (R_SUCCEEDED(rc)) {
-        rc = _hidActivateSevenSixAxisSensor();
-        if (R_FAILED(rc)) hidFinalizeSevenSixAxisSensor();
-        return rc;
-    }
 
     if (R_FAILED(rc)) {
         tmemClose(&g_sevenSixAxisSensorTmem0);
