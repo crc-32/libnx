@@ -222,7 +222,7 @@ Result nwindowDequeueBuffer(NWindow* nw, s32* out_slot, NvMultiFence* out_fence)
 
     if (eventActive(&nw->event)) {
         do {
-            eventWait(&nw->event, U64_MAX);
+            eventWait(&nw->event, UINT64_MAX);
             rc = bqDequeueBuffer(&nw->bq, true, nw->width, nw->height, nw->format, nw->usage, &slot, &fence);
         } while (rc == MAKERESULT(Module_LibnxBinder, LibnxBinderError_WouldBlock));
     }
@@ -324,13 +324,8 @@ Result nwindowReleaseBuffers(NWindow* nw)
 
     if (nw->cur_slot >= 0)
         rc = MAKERESULT(Module_Libnx, LibnxError_BadInput);
-    else if (nw->is_connected && nw->slots_configured) {
-        for (u32 i = 0; i < 64; i ++)
-            if (nw->slots_configured & (1UL << i))
-                bqDetachBuffer(&nw->bq, i);
-
+    else if (nw->is_connected && nw->slots_configured)
         rc = _nwindowDisconnect(nw);
-    }
 
     mutexUnlock(&nw->mutex);
     return rc;

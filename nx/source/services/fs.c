@@ -293,6 +293,22 @@ Result fsOpenSaveDataFileSystemBySystemSaveDataId(FsFileSystem* out, FsSaveDataS
     );
 }
 
+Result fsOpenReadOnlySaveDataFileSystem(FsFileSystem* out, FsSaveDataSpaceId save_data_space_id, const FsSaveDataAttribute *attr) {
+    if (hosversionBefore(2,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    const struct {
+        u8 save_data_space_id;
+        u8 pad[7];
+        FsSaveDataAttribute attr;
+    } in = { (u8)save_data_space_id, {0}, *attr };
+
+    return _fsObjectDispatchIn(&g_fsSrv, 53, in,
+        .out_num_objects = 1,
+        .out_objects = &out->s,
+    );
+}
+
 Result fsReadSaveDataFileSystemExtraDataBySaveDataSpaceId(void* buf, size_t len, FsSaveDataSpaceId save_data_space_id, u64 saveID) {
     if (hosversionBefore(3,0,0))
         return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
@@ -351,6 +367,14 @@ Result fsOpenSaveDataInfoReader(FsSaveDataInfoReader* out, FsSaveDataSpaceId sav
     }
 }
 
+Result fsOpenImageDirectoryFileSystem(FsFileSystem* out, FsImageDirectoryId image_directory_id) {
+    u32 tmp=image_directory_id;
+    return _fsObjectDispatchIn(&g_fsSrv, 100, tmp,
+        .out_num_objects = 1,
+        .out_objects = &out->s,
+    );
+}
+
 Result fsOpenContentStorageFileSystem(FsFileSystem* out, FsContentStorageId content_storage_id) {
     u32 tmp=content_storage_id;
     return _fsObjectDispatchIn(&g_fsSrv, 110, tmp,
@@ -392,6 +416,13 @@ Result fsOpenDeviceOperator(FsDeviceOperator* out) {
 
 Result fsOpenSdCardDetectionEventNotifier(FsEventNotifier* out) {
     return _fsCmdGetSession(&g_fsSrv, &out->s, 500);
+}
+
+Result fsIsSignedSystemPartitionOnSdCardValid(bool *out) {
+    if (!hosversionBetween(4, 8))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return _fsCmdNoInOutBool(&g_fsSrv, out, 640);
 }
 
 Result fsGetRightsIdByPath(const char* path, FsRightsId* out_rights_id) {
@@ -479,6 +510,63 @@ Result fsOpen_SaveData(FsFileSystem* out, u64 application_id, AccountUid uid) {
     return fsOpenSaveDataFileSystem(out, FsSaveDataSpaceId_User, &attr);
 }
 
+Result fsOpen_SaveDataReadOnly(FsFileSystem* out, u64 application_id, AccountUid uid) {
+    FsSaveDataAttribute attr;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.application_id = application_id;
+    attr.uid = uid;
+    attr.save_data_type = FsSaveDataType_Account;
+
+    return fsOpenReadOnlySaveDataFileSystem(out, FsSaveDataSpaceId_User, &attr);
+}
+
+Result fsOpen_BcatSaveData(FsFileSystem* out, u64 application_id) {
+    FsSaveDataAttribute attr;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.application_id = application_id;
+    attr.save_data_type = FsSaveDataType_Bcat;
+
+    return fsOpenSaveDataFileSystem(out, FsSaveDataSpaceId_User, &attr);
+}
+
+Result fsOpen_DeviceSaveData(FsFileSystem* out, u64 application_id) {
+    FsSaveDataAttribute attr;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.application_id = application_id;
+    attr.save_data_type = FsSaveDataType_Device;
+
+    return fsOpenSaveDataFileSystem(out, FsSaveDataSpaceId_User, &attr);
+}
+
+Result fsOpen_TemporaryStorage(FsFileSystem* out) {
+    if (hosversionBefore(3,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    FsSaveDataAttribute attr;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.save_data_type = FsSaveDataType_Temporary;
+
+    return fsOpenSaveDataFileSystem(out, FsSaveDataType_Temporary, &attr);
+}
+
+Result fsOpen_CacheStorage(FsFileSystem* out, u64 application_id, u16 save_data_index) {
+    if (hosversionBefore(3,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    FsSaveDataAttribute attr;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.application_id = application_id;
+    attr.save_data_type = FsSaveDataType_Cache;
+    attr.save_data_index = save_data_index;
+
+    return fsOpenSaveDataFileSystem(out, FsSaveDataSpaceId_User, &attr);
+}
+
 Result fsOpen_SystemSaveData(FsFileSystem* out, FsSaveDataSpaceId save_data_space_id, u64 system_save_data_id, AccountUid uid) {
     FsSaveDataAttribute attr;
 
@@ -488,6 +576,19 @@ Result fsOpen_SystemSaveData(FsFileSystem* out, FsSaveDataSpaceId save_data_spac
     attr.save_data_type = FsSaveDataType_System;
 
     return fsOpenSaveDataFileSystemBySystemSaveDataId(out, save_data_space_id, &attr);
+}
+
+Result fsOpen_SystemBcatSaveData(FsFileSystem* out, u64 system_save_data_id) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    FsSaveDataAttribute attr;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.system_save_data_id = system_save_data_id;
+    attr.save_data_type = FsSaveDataType_SystemBcat;
+
+    return fsOpenSaveDataFileSystemBySystemSaveDataId(out, FsSaveDataSpaceId_System, &attr);
 }
 
 //-----------------------------------------------------------------------------
@@ -614,9 +715,6 @@ Result fsFsQueryEntry(FsFileSystem* fs, void *out, size_t out_size, const void *
     if (hosversionBefore(4,0,0))
         return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
 
-    char send_path[FS_MAX_PATH] = {0};
-    strncpy(send_path, path, sizeof(send_path)-1);
-
     return _fsObjectDispatchIn(&fs->s, 15, query_id,
         .buffer_attrs = {
             SfBufferAttr_HipcPointer  | SfBufferAttr_In,
@@ -624,9 +722,9 @@ Result fsFsQueryEntry(FsFileSystem* fs, void *out, size_t out_size, const void *
             SfBufferAttr_HipcMapAlias | SfBufferAttr_Out | SfBufferAttr_HipcMapTransferAllowsNonSecure,
         },
         .buffers = {
-            { send_path, sizeof(send_path) },
-            { in,        in_size           },
-            { out,       out_size          },
+            { path, FS_MAX_PATH },
+            { in,   in_size     },
+            { out,  out_size    },
         },
     );
 }
@@ -640,7 +738,8 @@ Result fsFsIsValidSignedSystemPartitionOnSdCard(FsFileSystem* fs, bool *out) {
         return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
 
     u8 tmp=0;
-    Result rc = fsFsQueryEntry(fs, &tmp, sizeof(tmp), NULL, 0, "/", FsFileSystemQueryId_IsValidSignedSystemPartitionOnSdCard);
+    char send_path[FS_MAX_PATH] = "/";
+    Result rc = fsFsQueryEntry(fs, &tmp, sizeof(tmp), NULL, 0, send_path, FsFileSystemQueryId_IsValidSignedSystemPartitionOnSdCard);
     if (R_SUCCEEDED(rc) && out) *out = tmp & 1;
     return rc;
 }

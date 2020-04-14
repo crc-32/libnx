@@ -25,17 +25,17 @@ NX_GENERATE_SERVICE_GUARD(audout);
 Result _audoutInitialize(void) {
     Result rc = 0;
     rc = smGetService(&g_audoutSrv, "audout:u");
-    
+
     // Setup the default device
     if (R_SUCCEEDED(rc)) {
         // Passing an empty device name will open the default "DeviceOut"
         char DeviceNameIn[DEVICE_NAME_LENGTH] = {0};
         char DeviceNameOut[DEVICE_NAME_LENGTH] = {0};
-        
+
         // Open audio output device
         rc = audoutOpenAudioOut(DeviceNameIn, DeviceNameOut, DEFAULT_SAMPLE_RATE, DEFAULT_CHANNEL_COUNT, &g_sampleRate, &g_channelCount, &g_pcmFormat, &g_deviceState);
     }
-    
+
     // Register global handle for buffer events
     if (R_SUCCEEDED(rc))
         rc = _audoutRegisterBufferEvent(&g_audoutBufferEvent);
@@ -106,25 +106,25 @@ static Result _audoutCmdNoInOutU32(Service* srv, u32 *out, u32 cmd_id) {
 Result audoutWaitPlayFinish(AudioOutBuffer **released, u32* released_count, u64 timeout) {
     // Wait on the buffer event handle
     Result rc = eventWait(&g_audoutBufferEvent, timeout);
-    
+
     if (R_SUCCEEDED(rc)) {
         // Grab the released buffer
         rc = audoutGetReleasedAudioOutBuffer(released, released_count);
     }
-    
+
     return rc;
 }
 
 Result audoutPlayBuffer(AudioOutBuffer *source, AudioOutBuffer **released) {
     Result rc = 0;
     u32 released_count = 0;
-    
+
     // Try to push the supplied buffer to the audio output device
     rc = audoutAppendAudioOutBuffer(source);
-    
+
     if (R_SUCCEEDED(rc))
-        rc = audoutWaitPlayFinish(released, &released_count, U64_MAX);
-    
+        rc = audoutWaitPlayFinish(released, &released_count, UINT64_MAX);
+
     return rc;
 }
 
@@ -219,4 +219,42 @@ Result audoutContainsAudioOutBuffer(AudioOutBuffer *Buffer, bool *ContainsBuffer
     Result rc = serviceDispatchInOut(&g_audoutIAudioOut, 6, tmp, out);
     if (R_SUCCEEDED(rc) && ContainsBuffer) *ContainsBuffer = out & 1;
     return rc;
+}
+
+Result audoutGetAudioOutBufferCount(u32 *count) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatchOut(&g_audoutIAudioOut, 9, *count);
+}
+
+Result audoutGetAudioOutPlayedSampleCount(u64 *count) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatchOut(&g_audoutIAudioOut, 10, *count);
+}
+
+Result audoutFlushAudioOutBuffers(bool *flushed) {
+    if (hosversionBefore(4,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    u8 out=0;
+    Result rc = serviceDispatchOut(&g_audoutIAudioOut, 11, out);
+    if (R_SUCCEEDED(rc) && flushed) *flushed = out & 1;
+    return rc;
+}
+
+Result audoutSetAudioOutVolume(float volume) {
+    if (hosversionBefore(6,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatchIn(&g_audoutIAudioOut, 12, volume);
+}
+
+Result audoutGetAudioOutVolume(float *volume) {
+    if (hosversionBefore(6,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatchOut(&g_audoutIAudioOut, 13, *volume);
 }

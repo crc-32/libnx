@@ -45,7 +45,7 @@ Result ldrShellSetProgramArguments(u64 program_id, const void *args, size_t args
     return _ldrSetProgramArguments(&g_ldrShellSrv, program_id, args, args_size);
 }
 
-Result ldrShellClearLaunchQueue(void) {
+Result ldrShellFlushArguments(void) {
     return _ldrFlushArguments(&g_ldrShellSrv);
 }
 
@@ -53,7 +53,7 @@ Result ldrDmntSetProgramArguments(u64 program_id, const void *args, size_t args_
     return _ldrSetProgramArguments(&g_ldrDmntSrv, program_id, args, args_size);
 }
 
-Result ldrDmntClearLaunchQueue(void) {
+Result ldrDmntFlushArguments(void) {
     return _ldrFlushArguments(&g_ldrDmntSrv);
 }
 
@@ -91,4 +91,12 @@ Result ldrPmPinProgram(const NcmProgramLocation *loc, u64 *out_pin_id) {
 
 Result ldrPmUnpinProgram(u64 pin_id) {
     return serviceDispatchIn(&g_ldrPmSrv, 3, pin_id);
+}
+
+Result ldrPmSetEnabledProgramVerification(bool enabled) {
+    if (hosversionBefore(10,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    const u8 in = enabled != 0;
+    return serviceDispatchIn(&g_ldrPmSrv, 4, in);
 }

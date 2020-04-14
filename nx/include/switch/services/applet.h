@@ -368,7 +368,7 @@ Service* appletGetServiceSession_DisplayController(void);
 Service* appletGetServiceSession_DebugFunctions(void);
 
 /// Get the cached AppletResourceUserId.
-Result appletGetAppletResourceUserId(u64 *out);
+u64 appletGetAppletResourceUserId(void);
 
 /// Get the \ref AppletType.
 AppletType appletGetAppletType(void);
@@ -1003,7 +1003,7 @@ Result appletLockAccessorTryLock(AppletLockAccessor *a, bool *flag);
 
 /**
  * @brief Lock a LockAccessor.
- * @note Similar to \ref appletLockAccessorTryLock, except this uses timeout U64_MAX with the eventWait call, and this uses TryLock repeatedly until the output flag value is true.
+ * @note Similar to \ref appletLockAccessorTryLock, except this uses timeout UINT64_MAX with the eventWait call, and this uses TryLock repeatedly until the output flag value is true.
  * @param a LockAccessor object.
  */
 Result appletLockAccessorLock(AppletLockAccessor *a);
@@ -1095,7 +1095,7 @@ Result appletHolderTerminate(AppletHolder *h);
 /**
  * @brief Uses cmds GetAppletStateChangedEvent and RequestExit, then waits for the LibraryApplet to exit with the specified timeout. If a timeout occurs, the Terminate cmd is used.
  * @param h AppletHolder object.
- * @param[in] timeout Timeout in nanoseconds. U64_MAX for no timeout.
+ * @param[in] timeout Timeout in nanoseconds. UINT64_MAX for no timeout.
  */
 Result appletHolderRequestExitOrTerminate(AppletHolder *h, u64 timeout);
 
@@ -1792,7 +1792,7 @@ Result appletApplicationAreAnyLibraryAppletsLeft(AppletApplication *a, bool *out
 /**
  * @brief Calls the same func as \ref appletHolderRequestExitOrTerminate with the output IAppletAccessor from the GetCurrentLibraryApplet cmd.
  * @param a \ref AppletApplication
- * @param[in] timeout Timeout in nanoseconds. U64_MAX for no timeout.
+ * @param[in] timeout Timeout in nanoseconds. UINT64_MAX for no timeout.
  */
 Result appletApplicationRequestExitLibraryAppletOrTerminate(AppletApplication *a, u64 timeout);
 
@@ -2468,6 +2468,10 @@ AppletOperationMode appletGetOperationMode(void);
 ApmPerformanceMode appletGetPerformanceMode(void);
 AppletFocusState appletGetFocusState(void);
 
+/**
+ * @brief Sets the current \ref AppletFocusHandlingMode.
+ * @note Should only be called with AppletType_Application.
+ */
 Result appletSetFocusHandlingMode(AppletFocusHandlingMode mode);
 
 ///@}

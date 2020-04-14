@@ -51,6 +51,17 @@ Result audoutAppendAudioOutBuffer(AudioOutBuffer *Buffer);
 Result audoutGetReleasedAudioOutBuffer(AudioOutBuffer **Buffer, u32 *ReleasedBuffersCount);
 Result audoutContainsAudioOutBuffer(AudioOutBuffer *Buffer, bool *ContainsBuffer);
 
+/// Only available with [4.0.0+].
+Result audoutGetAudioOutBufferCount(u32 *count);
+/// Only available with [4.0.0+].
+Result audoutGetAudioOutPlayedSampleCount(u64 *count);
+/// Only available with [4.0.0+].
+Result audoutFlushAudioOutBuffers(bool *flushed);
+/// Only available with [6.0.0+].
+Result audoutSetAudioOutVolume(float volume);
+/// Only available with [6.0.0+].
+Result audoutGetAudioOutVolume(float *volume);
+
 /**
  * @brief Submits an audio sample data buffer for playing and waits for it to finish playing.
  * @brief Uses \ref audoutAppendAudioOutBuffer and \ref audoutWaitPlayFinish internally.
@@ -63,7 +74,7 @@ Result audoutPlayBuffer(AudioOutBuffer *source, AudioOutBuffer **released);
  * @brief Waits for audio playback to finish.
  * @param released AudioOutBuffer to receive the first played buffer after being released.
  * @param released_count Pointer to receive the number of played buffers.
- * @param timeout Timeout value, use U64_MAX to wait until all finished.
+ * @param timeout Timeout value, use UINT64_MAX to wait until all finished.
  */
 Result audoutWaitPlayFinish(AudioOutBuffer **released, u32* released_count, u64 timeout);
 

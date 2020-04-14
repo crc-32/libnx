@@ -17,7 +17,6 @@ extern "C" {
 
 #include "switch/arm/tls.h"
 #include "switch/arm/cache.h"
-#include "switch/arm/atomics.h"
 #include "switch/arm/counter.h"
 
 #include "switch/kernel/svc.h"
@@ -64,6 +63,8 @@ extern "C" {
 #include "switch/services/bpc.h"
 #include "switch/services/pcv.h"
 #include "switch/services/clkrst.h"
+#include "switch/services/fan.h"
+#include "switch/services/pgl.h"
 #include "switch/services/psm.h"
 #include "switch/services/spsm.h"
 //#include "switch/services/bsd.h" Use <sys/socket.h> instead
@@ -74,6 +75,7 @@ extern "C" {
 #include "switch/services/usbds.h"
 #include "switch/services/usbhs.h"
 #include "switch/services/hid.h"
+#include "switch/services/hidbus.h"
 #include "switch/services/hiddbg.h"
 #include "switch/services/hidsys.h"
 #include "switch/services/irs.h"
@@ -81,9 +83,11 @@ extern "C" {
 #include "switch/services/vi.h"
 #include "switch/services/nv.h"
 #include "switch/services/nifm.h"
+#include "switch/services/nim.h"
 #include "switch/services/ns.h"
 #include "switch/services/ldr.h"
 #include "switch/services/ro.h"
+#include "switch/services/tc.h"
 #include "switch/services/ts.h"
 #include "switch/services/pm.h"
 #include "switch/services/set.h"
@@ -92,6 +96,9 @@ extern "C" {
 #include "switch/services/ncm.h"
 #include "switch/services/psc.h"
 #include "switch/services/caps.h"
+#include "switch/services/capsa.h"
+#include "switch/services/capsc.h"
+#include "switch/services/capsdc.h"
 #include "switch/services/capsu.h"
 #include "switch/services/capssc.h"
 #include "switch/services/capssu.h"
@@ -137,6 +144,7 @@ extern "C" {
 #include "switch/runtime/hosversion.h"
 #include "switch/runtime/nxlink.h"
 #include "switch/runtime/resolver.h"
+#include "switch/runtime/ringcon.h"
 
 #include "switch/runtime/util/utf.h"
 

@@ -10,9 +10,6 @@
 #include <stddef.h>
 #include <stdalign.h>
 
-/// The maximum value of a u64.
-#define U64_MAX	UINT64_MAX
-
 #ifndef SSIZE_MAX
 #ifdef SIZE_MAX
 #define SSIZE_MAX ((SIZE_MAX) >> 1)
@@ -49,6 +46,8 @@ typedef void (*ThreadFunc)(void *); ///< Thread entrypoint function.
 typedef void (*VoidFn)(void);       ///< Function without arguments nor return value.
 
 typedef struct { u8 uuid[0x10]; } Uuid;   ///< Unique identifier.
+
+typedef struct { float value[3]; } UtilFloat3;   ///< 3 floats.
 
 /// Creates a bitmask from a bit number.
 #ifndef BIT

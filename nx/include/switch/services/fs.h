@@ -123,6 +123,11 @@ typedef struct {
     u8 padding[7];
 } FsTimeStampRaw;
 
+/// This is nn::fssystem::ArchiveMacKey. Used by \ref setsysGetThemeKey and \ref setsysSetThemeKey. Does not appear to be in use elsewhere.
+typedef struct {
+    u8 key[0x10];
+} FsArchiveMacKey;
+
 /// Returned by fsFsGetEntryType.
 typedef enum {
     FsDirEntryType_Dir  = 0, ///< Entry is a directory.
@@ -169,6 +174,12 @@ typedef enum {
     FsCustomStorageId_System   = 0,
     FsCustomStorageId_SdCard   = 1,
 } FsCustomStorageId;
+
+/// ImageDirectoryId
+typedef enum {
+    FsImageDirectoryId_Nand = 0,
+    FsImageDirectoryId_Sd   = 1,
+} FsImageDirectoryId;
 
 /// SaveDataSpaceId
 typedef enum {
@@ -312,16 +323,17 @@ Result fsOpenBisStorage(FsStorage* out, FsBisPartitionId partitionId);
 Result fsOpenSdCardFileSystem(FsFileSystem* out);
 
 Result fsCreateSaveDataFileSystemBySystemSaveDataId(const FsSaveDataAttribute* attr, const FsSaveDataCreationInfo* creation_info);
-Result fsDeleteSaveDataFileSystemBySaveDataSpaceId(FsSaveDataSpaceId save_data_space_id, u64 saveID); /// [2.0.0+]
+Result fsDeleteSaveDataFileSystemBySaveDataSpaceId(FsSaveDataSpaceId save_data_space_id, u64 saveID); ///< [2.0.0+]
 
 Result fsIsExFatSupported(bool* out);
 
 Result fsOpenGameCardFileSystem(FsFileSystem* out, const FsGameCardHandle* handle, FsGameCardPartition partition);
 
-Result fsExtendSaveDataFileSystem(FsSaveDataSpaceId save_data_space_id, u64 saveID, s64 dataSize, s64 journalSize); /// [3.0.0+]
+Result fsExtendSaveDataFileSystem(FsSaveDataSpaceId save_data_space_id, u64 saveID, s64 dataSize, s64 journalSize); ///< [3.0.0+]
 
 Result fsOpenSaveDataFileSystem(FsFileSystem* out, FsSaveDataSpaceId save_data_space_id, const FsSaveDataAttribute *attr);
 Result fsOpenSaveDataFileSystemBySystemSaveDataId(FsFileSystem* out, FsSaveDataSpaceId save_data_space_id, const FsSaveDataAttribute *attr);
+Result fsOpenReadOnlySaveDataFileSystem(FsFileSystem* out, FsSaveDataSpaceId save_data_space_id, const FsSaveDataAttribute *attr); ///< [2.0.0+].
 
 Result fsReadSaveDataFileSystemExtraDataBySaveDataSpaceId(void* buf, size_t len, FsSaveDataSpaceId save_data_space_id, u64 saveID);
 Result fsReadSaveDataFileSystemExtraData(void* buf, size_t len, u64 saveID);
@@ -329,14 +341,17 @@ Result fsWriteSaveDataFileSystemExtraData(const void* buf, size_t len, FsSaveDat
 
 Result fsOpenSaveDataInfoReader(FsSaveDataInfoReader* out, FsSaveDataSpaceId save_data_space_id);
 
+Result fsOpenImageDirectoryFileSystem(FsFileSystem* out, FsImageDirectoryId image_directory_id);
 Result fsOpenContentStorageFileSystem(FsFileSystem* out, FsContentStorageId content_storage_id);
-Result fsOpenCustomStorageFileSystem(FsFileSystem* out, FsCustomStorageId custom_storage_id); /// [7.0.0+]
+Result fsOpenCustomStorageFileSystem(FsFileSystem* out, FsCustomStorageId custom_storage_id); ///< [7.0.0+]
 
 Result fsOpenDataStorageByCurrentProcess(FsStorage* out);
 Result fsOpenDataStorageByDataId(FsStorage* out, u64 dataId, NcmStorageId storageId);
 
 Result fsOpenDeviceOperator(FsDeviceOperator* out);
 Result fsOpenSdCardDetectionEventNotifier(FsEventNotifier* out);
+
+Result fsIsSignedSystemPartitionOnSdCardValid(bool *out);
 
 /// Retrieves the rights id corresponding to the content path. Only available on [2.0.0+].
 Result fsGetRightsIdByPath(const char* path, FsRightsId* out_rights_id);
@@ -353,13 +368,38 @@ Result fsGetGlobalAccessLogMode(u32* out_mode);
 Result fsCreate_SystemSaveDataWithOwner(FsSaveDataSpaceId save_data_space_id, u64 system_save_data_id, AccountUid uid, u64 owner_id, s64 size, s64 journal_size, u32 flags);
 Result fsCreate_SystemSaveData(FsSaveDataSpaceId save_data_space_id, u64 system_save_data_id, s64 size, s64 journal_size, u32 flags);
 
-/// Wrapper(s) for fsOpenSaveDataFileSystem.
-/// See FsSave for program_id and uid.
+/// Wrapper for fsOpenSaveDataFileSystem.
+/// See \ref FsSaveDataAttribute for application_id and uid.
 Result fsOpen_SaveData(FsFileSystem* out, u64 application_id, AccountUid uid);
 
-/// Wrapper for fsOpenSaveDataFileSystemBySystemSaveDataId.
+/// Wrapper for fsOpenReadOnlySaveDataFileSystem.
+/// Only available on [2.0.0+].
+/// See \ref FsSaveDataAttribute for application_id and uid.
+Result fsOpen_SaveDataReadOnly(FsFileSystem* out, u64 application_id, AccountUid uid);
+
+/// Wrapper for fsOpenSaveDataFileSystem, for opening BcatSaveData.
+Result fsOpen_BcatSaveData(FsFileSystem* out, u64 application_id);
+
+/// Wrapper for fsOpenSaveDataFileSystem, for opening DeviceSaveData.
+/// See \ref FsSaveDataAttribute for application_id.
+Result fsOpen_DeviceSaveData(FsFileSystem* out, u64 application_id);
+
+/// Wrapper for fsOpenSaveDataFileSystem, for opening TemporaryStorage.
+/// Only available on [3.0.0+].
+Result fsOpen_TemporaryStorage(FsFileSystem* out);
+
+/// Wrapper for fsOpenSaveDataFileSystem, for opening CacheStorage.
+/// Only available on [3.0.0+].
+/// See \ref FsSaveDataAttribute for application_id.
+Result fsOpen_CacheStorage(FsFileSystem* out, u64 application_id, u16 save_data_index);
+
+/// Wrapper for fsOpenSaveDataFileSystemBySystemSaveDataId, for opening SystemSaveData.
 /// WARNING: You can brick when writing to SystemSaveData, if the data is corrupted etc.
 Result fsOpen_SystemSaveData(FsFileSystem* out, FsSaveDataSpaceId save_data_space_id, u64 system_save_data_id, AccountUid uid);
+
+/// Wrapper for fsOpenSaveDataFileSystemBySystemSaveDataId, for opening SystemBcatSaveData.
+/// Only available on [4.0.0+].
+Result fsOpen_SystemBcatSaveData(FsFileSystem* out, u64 system_save_data_id);
 
 // IFileSystem
 Result fsFsCreateFile(FsFileSystem* fs, const char* path, s64 size, u32 option);
